@@ -1,0 +1,15 @@
+name: TorchDiffEEG
+channels:
+  - nvidia
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=11.8  # Change this if using a different CUDA version, or remove for CPU-only
+  - pip
+  - pip:
+      - any-other-required-packages

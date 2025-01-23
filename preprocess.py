@@ -42,7 +42,7 @@ from fooof.bands import Bands
 from fooof.objs import combine_fooofs
 from fooof.utils import trim_spectrum
 from fooof.analysis.error import compute_pointwise_error_fm
-import antropy as ant
+# import antropy as ant
 # import yasa
 # import autogluon
 from scorepochs import scorEpochs
