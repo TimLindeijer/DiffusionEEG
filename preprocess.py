@@ -157,81 +157,81 @@ description.to_csv(bids_root+"/derivatives/sovaharmony/inspection.csv", index=Fa
 # print(len(eegs))
 # CONTINUE FROM HERE
 
-dict_list = []
-for eeg_file in eegs: #read and preload dataset
-    subject_info = layout.parse_file_entities(eeg_file)
-    session = subject_info.get('session')
-    subject = subject_info.get('subject')
-    bids_path = BIDSPath(subject=subject, session=session, task=task, root=bids_root, datatype='eeg')
-    epochs = mne.read_epochs(eeg_file, preload = True)
-    mapping = {'T3': 'T7', 'T4': 'T8', 'T5': 'P7', 'T6': 'P8'}
-    epochs.rename_channels(mapping)
-    standardize(epochs) #standardize ch_names
-    keep = ['Fp1','Fp2', 'F3','F4', 'Fz', 'F7', 'F8',  'C3', 'C4', 'Cz' , 'T7','T8',  'P7' ,'P8', 'P3','P4', 'Pz', 'O1', 'O2']
-    epochs.pick_channels(keep)
-    epochs = epochs.filter(l_freq=1, h_freq=45) #bandpassing 1-30Hz
-    downsample = 128 #downsampling to 128Hz
-    epochs.resample(downsample)
-    nepochs,nchannels,npoints = epochs._data.shape
-    if nepochs >= 20:
-        clean_epochs = epochs
-         # get shape of clean epoched data and reshape to fit scorEpochs input requirements
-        continuous_signal = np.reshape(clean_epochs,(nchannels,nepochs*npoints),order='F') # final shape nchannels, npoints
-        t_ep = 5 #epoch length
-        fs = downsample #sampling freq
-        freq = [1, 30] #interest freq
-        cfg = {'freqRange':freq, 'fs':fs, 'windowL':t_ep}
-        idx_best, epoch, scores = scorEpochs(cfg, continuous_signal)
-        # Get the top 20 epoch indices from idx_best
-        best_20_indices = idx_best[:20]
-        # Use these indices to extract the best 20 epochs from clean_epochs
-        best_20_epochs = epochs[best_20_indices]
-        # Optionally, you can concatenate the epochs (though it's not strictly necessary)
-        epochs_c = mne.concatenate_epochs([best_20_epochs], add_offset=False, on_mismatch='raise', verbose=None)
+# dict_list = []
+# for eeg_file in eegs: #read and preload dataset
+#     subject_info = layout.parse_file_entities(eeg_file)
+#     session = subject_info.get('session')
+#     subject = subject_info.get('subject')
+#     bids_path = BIDSPath(subject=subject, session=session, task=task, root=bids_root, datatype='eeg')
+#     epochs = mne.read_epochs(eeg_file, preload = True)
+#     mapping = {'T3': 'T7', 'T4': 'T8', 'T5': 'P7', 'T6': 'P8'}
+#     epochs.rename_channels(mapping)
+#     standardize(epochs) #standardize ch_names
+#     keep = ['Fp1','Fp2', 'F3','F4', 'Fz', 'F7', 'F8',  'C3', 'C4', 'Cz' , 'T7','T8',  'P7' ,'P8', 'P3','P4', 'Pz', 'O1', 'O2']
+#     epochs.pick_channels(keep)
+#     epochs = epochs.filter(l_freq=1, h_freq=45) #bandpassing 1-30Hz
+#     downsample = 128 #downsampling to 128Hz
+#     epochs.resample(downsample)
+#     nepochs,nchannels,npoints = epochs._data.shape
+#     if nepochs >= 20:
+#         clean_epochs = epochs
+#          # get shape of clean epoched data and reshape to fit scorEpochs input requirements
+#         continuous_signal = np.reshape(clean_epochs,(nchannels,nepochs*npoints),order='F') # final shape nchannels, npoints
+#         t_ep = 5 #epoch length
+#         fs = downsample #sampling freq
+#         freq = [1, 30] #interest freq
+#         cfg = {'freqRange':freq, 'fs':fs, 'windowL':t_ep}
+#         idx_best, epoch, scores = scorEpochs(cfg, continuous_signal)
+#         # Get the top 20 epoch indices from idx_best
+#         best_20_indices = idx_best[:20]
+#         # Use these indices to extract the best 20 epochs from clean_epochs
+#         best_20_epochs = epochs[best_20_indices]
+#         # Optionally, you can concatenate the epochs (though it's not strictly necessary)
+#         epochs_c = mne.concatenate_epochs([best_20_epochs], add_offset=False, on_mismatch='raise', verbose=None)
     
-        epochs = epochs_c
-        epochs.set_montage("standard_1005")
-        nepochs,nchannels,npoints = epochs._data.shape
-        correct_channels = keep
-        epochs.reorder_channels(correct_channels)
-        channels = epochs.info['ch_names']
-        srate = downsample
-        for ch,ch_label in enumerate(channels):
-            for ep in range(nepochs):
-                features = {}
-                features['center'] = 'korea'
-                features['subject'] = ('kor_' + subject)
-                features['channel'] = ch_label
-                features['epoch'] = ep
-                features['permutation'] = ant.perm_entropy(epochs.get_data()[ep,ch,:], normalize=True)
-                features['sample'] = ant.sample_entropy(epochs.get_data()[ep,ch,:])
-                features['approximate'] = ant.app_entropy(epochs.get_data()[ep,ch,:])
-                features['svd_ent'] = ant.svd_entropy(epochs.get_data()[ep,ch,:], order=5, normalize=True)             
-                features['higuchi_fd']  = ant.higuchi_fd(epochs.get_data()[ep,ch,:])  
-                features['hjort_mobility']  = (ant.hjorth_params(epochs.get_data()[ep,ch,:]))[0]
-                features['hjort_complexity']  = (ant.hjorth_params(epochs.get_data()[ep,ch,:]))[1]
-                features['detrended_fluct']  = ant.detrended_fluctuation(epochs.get_data()[ep,ch,:])
-                features['katz_fd']  = ant.katz_fd(epochs.get_data()[ep,ch,:])
-                features['petrosian_fd']  = ant.petrosian_fd(epochs.get_data()[ep,ch,:])
-                dict_list.append(features)
-entropies = pd.DataFrame(dict_list)
+#         epochs = epochs_c
+#         epochs.set_montage("standard_1005")
+#         nepochs,nchannels,npoints = epochs._data.shape
+#         correct_channels = keep
+#         epochs.reorder_channels(correct_channels)
+#         channels = epochs.info['ch_names']
+#         srate = downsample
+#         for ch,ch_label in enumerate(channels):
+#             for ep in range(nepochs):
+#                 features = {}
+#                 features['center'] = 'korea'
+#                 features['subject'] = ('kor_' + subject)
+#                 features['channel'] = ch_label
+#                 features['epoch'] = ep
+#                 features['permutation'] = ant.perm_entropy(epochs.get_data()[ep,ch,:], normalize=True)
+#                 features['sample'] = ant.sample_entropy(epochs.get_data()[ep,ch,:])
+#                 features['approximate'] = ant.app_entropy(epochs.get_data()[ep,ch,:])
+#                 features['svd_ent'] = ant.svd_entropy(epochs.get_data()[ep,ch,:], order=5, normalize=True)             
+#                 features['higuchi_fd']  = ant.higuchi_fd(epochs.get_data()[ep,ch,:])  
+#                 features['hjort_mobility']  = (ant.hjorth_params(epochs.get_data()[ep,ch,:]))[0]
+#                 features['hjort_complexity']  = (ant.hjorth_params(epochs.get_data()[ep,ch,:]))[1]
+#                 features['detrended_fluct']  = ant.detrended_fluctuation(epochs.get_data()[ep,ch,:])
+#                 features['katz_fd']  = ant.katz_fd(epochs.get_data()[ep,ch,:])
+#                 features['petrosian_fd']  = ant.petrosian_fd(epochs.get_data()[ep,ch,:])
+#                 dict_list.append(features)
+# entropies = pd.DataFrame(dict_list)
 
-permutation = pd.DataFrame(entropies.groupby(['center','subject', 'channel']).permutation.mean())
-entropies.rename(columns = {'sample':'sample_ent'}, inplace = True)
-sample_ent = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).sample_ent.mean())
-approximate = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).approximate.mean())
-svd_ent = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).svd_ent.mean())
-higuchi_fd = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).higuchi_fd.mean())
-hjort_mobility = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).hjort_mobility.mean())
-hjort_complexity = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).hjort_complexity.mean())
-detrended_fluct = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).detrended_fluct.mean())
-katz_fd = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).katz_fd.mean())
-petrosian_fd = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).petrosian_fd.mean())
+# permutation = pd.DataFrame(entropies.groupby(['center','subject', 'channel']).permutation.mean())
+# entropies.rename(columns = {'sample':'sample_ent'}, inplace = True)
+# sample_ent = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).sample_ent.mean())
+# approximate = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).approximate.mean())
+# svd_ent = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).svd_ent.mean())
+# higuchi_fd = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).higuchi_fd.mean())
+# hjort_mobility = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).hjort_mobility.mean())
+# hjort_complexity = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).hjort_complexity.mean())
+# detrended_fluct = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).detrended_fluct.mean())
+# katz_fd = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).katz_fd.mean())
+# petrosian_fd = pd.DataFrame(entropies.groupby(['center', 'subject', 'channel']).petrosian_fd.mean())
 
-dfs = [permutation, sample_ent, approximate, svd_ent, higuchi_fd, hjort_mobility, hjort_complexity, detrended_fluct, katz_fd, petrosian_fd]
-entropies_ave = pd.DataFrame(pd.concat(dfs, axis = 1)).reset_index()
+# dfs = [permutation, sample_ent, approximate, svd_ent, higuchi_fd, hjort_mobility, hjort_complexity, detrended_fluct, katz_fd, petrosian_fd]
+# entropies_ave = pd.DataFrame(pd.concat(dfs, axis = 1)).reset_index()
 
-entropies_ave.to_feather(data_analysis_path + "/papers_alberto/cau_combat/features_data/ent_korea.feather")
+# entropies_ave.to_feather(data_analysis_path + "/papers_alberto/cau_combat/features_data/ent_korea.feather")
 
 
 # anterior = ["Fp1", "Fp2", "F3", "F4", "F7", "F8", "Fz"]
