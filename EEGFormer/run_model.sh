@@ -1,11 +1,12 @@
 #!/bin/bash
-#SBATCH --gres=gpu:0
+#SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=03:15:00
-#SBATCH --job-name=env_setup_compile
-#SBATCH --output=outputs/env_setup.out
+#SBATCH --job-name=train_test
+#SBATCH --output=outputs/train_test.out
  
 # Activate environment
 uenv verbose cuda-11.8.0 cudnn-11.x-8.7.0
 uenv miniconda3-py311
-conda env create --file model_env/requirements.yaml
+conda activate TorchDiffEEG
+python -u model_env/train.py
