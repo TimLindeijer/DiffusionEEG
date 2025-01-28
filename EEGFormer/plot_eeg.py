@@ -1,52 +1,38 @@
 import mne
 import matplotlib.pyplot as plt
+import os
 
-# Define the path to your FIF file
-subject_id = "00001"  # Example subject ID (adjust this)
+# Define the correct path
+subject_id = "00001"  # Adjust subject ID as needed
 file_path = f"/home/stud/timlin/bhome/DiffusionEEG/data/caueeg_bids/derivatives/sovaharmony/sub-{subject_id}/eeg/sub-{subject_id}_task-eyesClosed_desc-reject[]_eeg.fif"
 
-# Load the FIF file (try as Raw, then Evoked/Epochs)
-try:
-    # Attempt to read as Raw data
-    raw = mne.io.read_raw_fif(file_path, preload=True)
-    data_type = "raw"
-except:
-    try:
-        # Attempt to read as Evoked data (average)
-        evoked_list = mne.read_evokeds(file_path)
-        evoked = evoked_list[0]  # Use the first evoked response
-        data_type = "evoked"
-    except:
-        try:
-            # Attempt to read as Epochs
-            epochs = mne.read_epochs(file_path)
-            data_type = "epochs"
-        except Exception as e:
-            raise ValueError(f"Could not read FIF file: {e}")
+# Check if the file exists
+if not os.path.exists(file_path):
+    raise FileNotFoundError(f"File not found: {file_path}")
 
-# Plot and save based on data type
+# Load epochs data
+epochs = mne.read_epochs(file_path)
+
+# Apply a bandpass filter (0.1–60 Hz to avoid DC offset)
+epochs_filtered = epochs.copy().filter(
+    l_freq=0.1,  # Lower cutoff (avoids DC)
+    h_freq=60.0,  # Upper cutoff (removes high-frequency noise)
+    method="iir",  # Use IIR filter for efficiency
+    verbose=True
+)
+
+# Plot filtered epochs (first 10 epochs for visualization)
 plt.figure(figsize=(12, 6))
-
-if data_type == "raw":
-    # Plot 10 seconds of EEG data (first 10 channels)
-    raw.pick_types(eeg=True).crop(tmax=10).load_data()
-    data, times = raw[:, :int(10 * raw.info["sfreq"])]
-    plt.plot(times, data.T * 1e6)  # Convert to microvolts
-    plt.xlabel("Time (s)")
-    plt.ylabel("Amplitude (µV)")
-    plt.title("Raw EEG Data (First 10 Seconds)")
-    
-elif data_type == "evoked":
-    # Plot evoked response
-    evoked.plot(show=False)
-    plt.title("Evoked Response")
-    
-elif data_type == "epochs":
-    # Plot epochs
-    epochs.plot(show=False)
-    plt.title("Epochs")
+epochs_filtered.plot(
+    picks="eeg",  # Plot only EEG channels
+    n_epochs=10,  # Show first 10 epochs
+    title="Filtered EEG Epochs (0.1–60 Hz)",
+    show=False
+)
 
 # Save the plot
-plt.tight_layout()
-plt.savefig("eeg_plot.png")
+plt.savefig("filtered_eeg_epochs.png", dpi=300)
 plt.close()
+
+# Optional: Save filtered epochs to a new FIF file
+epochs_filtered.save("filtered_epochs.fif", overwrite=True)
