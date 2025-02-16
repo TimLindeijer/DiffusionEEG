@@ -108,12 +108,12 @@ for eeg_file in eegs:
     # # Create new 1-second epochs
     debug_print("Creating 1-second epochs")
     new_epochs = mne.make_fixed_length_epochs(raw, duration=1.0, overlap=0.0, preload=True)
-    # # Standard normalization
-    # debug_print("Applying z-score normalization")
-    # def zscore_epoch(epoch):
-    #     return (epoch - np.mean(epoch, axis=-1, keepdims=True)) / np.std(epoch, axis=-1, keepdims=True)
+    # Standard normalization
+    debug_print("Applying z-score normalization")
+    def zscore_epoch(epoch):
+        return (epoch - np.mean(epoch, axis=-1, keepdims=True)) / np.std(epoch, axis=-1, keepdims=True)
     
-    # new_epochs.apply_function(zscore_epoch, picks='eeg', verbose='WARNING')
+    new_epochs.apply_function(zscore_epoch, picks='eeg', verbose='WARNING')
     
     # Save preprocessed epochs
     output_fname = f"sub-{entities['subject']}_task-eyesClosed_preproc-epo.fif"
