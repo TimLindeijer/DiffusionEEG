@@ -13,5 +13,5 @@ conda activate LEADEEG
 pip install -r LEAD/LEAD/requirements.txt
 pip install mne
 pip install h5py
-# pip uninstall torch torchvision torchaudio
-# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+pip uninstall torch torchvision torchaudio
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
