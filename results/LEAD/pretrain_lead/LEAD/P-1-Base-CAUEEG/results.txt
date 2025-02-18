@@ -1,0 +1,30 @@
+Model Setting: nh8_el2_dm512_df2048_seed41  
+Sample-level results: 
+Validation results , Accuracy: 0.65846, Precision: 0.63124, Recall: 0.61146, F1: 0.61299, AUROC: 0.69140, AUPRC: 0.66970
+Test results , Accuracy: 0.63678, Precision: 0.60614, Recall: 0.59382 F1: 0.59476, AUROC: 0.65669, AUPRC: 0.64045
+Subject-level results after majority voting: 
+Validation results, Accuracy: 0.67157, Precision: 0.70322, Recall: 0.64364, F1: 0.63186, AUROC: 0.64364, AUPRC: 0.63665
+Test results, Accuracy: 0.69347, Precision: 0.75204, Recall: 0.66374 F1: 0.65018, AUROC: 0.66374, AUPRC: 0.64856
+
+Pretraining Datasets: ADSZ,APAVA-19,ADFSU,AD-Auditory,REEG-PD-19,PEARL-Neuro-19,Depression-19,REEG-SRM-19,REEG-BACA-19,ADFTD,BrainLat-19
+Training Datasets: CAUEEG
+Test Datasets: CAUEEG
+Model_id: P-1-Base-CAUEEG; Model: LEAD; Total Params: 15869164
+Average and std of validation and testing results over 1 runs
+Sample-level results: 
+Validation results --- Accuracy: 65.85+-0.00%, Precision: 63.12+-0.00%, Recall: 61.15+-0.00%, F1: 61.30+-0.00%, AUROC: 69.14+-0.00%, AUPRC: 66.97+-0.00%
+Test results --- Accuracy: 63.68+-0.00%, Precision: 60.61+-0.00%, Recall: 59.38+-0.00%, F1: 59.48+-0.00%, AUROC: 65.67+-0.00%, AUPRC: 64.04+-0.00%
+Subject-level results after majority voting: 
+Validation results --- Accuracy: 67.16+-0.00%, Precision: 70.32+-0.00%, Recall: 64.36+-0.00%, F1: 63.19+-0.00%, AUROC: 64.36+-0.00%, AUPRC: 63.66+-0.00%
+Test results --- Accuracy: 69.35+-0.00%, Precision: 75.20+-0.00%, Recall: 66.37+-0.00%, F1: 65.02+-0.00%, AUROC: 66.37+-0.00%, AUPRC: 64.86+-0.00%
+
+
+
+Model Setting: nh8_el12_dm128_df256_seed41  
+Sample-level results: 
+Validation results , Accuracy: 0.66787, Precision: 0.64314, Recall: 0.61990, F1: 0.62185, AUROC: 0.70776, AUPRC: 0.68673
+Test results , Accuracy: 0.63872, Precision: 0.60799, Recall: 0.59413 F1: 0.59488, AUROC: 0.65781, AUPRC: 0.64078
+Subject-level results after majority voting: 
+Validation results, Accuracy: 0.68627, Precision: 0.73306, Recall: 0.65691, F1: 0.64441, AUROC: 0.65691, AUPRC: 0.64522
+Test results, Accuracy: 0.68342, Precision: 0.71323, Recall: 0.65787 F1: 0.64938, AUROC: 0.65787, AUPRC: 0.64534
+
