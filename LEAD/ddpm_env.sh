@@ -8,10 +8,11 @@
 # Activate environment
 uenv verbose cuda-11.8.0 cudnn-11.x-8.7.0
 uenv miniconda3-py39
-conda create --name LEAD39 python=3.9
 conda activate LEAD39
-pip install -r LEAD/LEAD/requirements.txt
-pip install mne
-pip install h5py
-pip uninstall torch torchvision torchaudio
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+pip install -r LEAD/DS-DDPM/requirements.txt
+pip install tensorboardx
+pip install labml
+pip install scikit-learn
+pip install torch torchvision
+pip install labml-helpers
+
