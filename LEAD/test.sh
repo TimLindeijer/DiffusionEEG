@@ -2,8 +2,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=024:00:00
-#SBATCH --job-name=LEAD_diff
-#SBATCH --output=outputs/p_LEAD_diff_50e_pre.out
+#SBATCH --job-name=D-2-CAUEEG-Diff-Advanced-Arc
+#SBATCH --output=outputs/CAUEEG_Diff_Advanced_Constraint_Arc.out
  
 # Activate environment
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
@@ -15,7 +15,7 @@ export CUDA_VISIBLE_DEVICES=0
 
 # Diffusion model training with simplified approach
 python -u LEAD/LEAD/run.py --method LEAD --task_name diffusion --is_training 1 \
---root_path ./dataset/ --model_id D-1-CAUEEG-Diff-Simple --model LEAD --data MultiDatasets \
+--root_path ./dataset/ --model_id D-1-CAUEEG-Diff-Advanced-Arc --model LEAD --data MultiDatasets \
 --training_datasets CAUEEG \
 --testing_datasets CAUEEG \
 --e_layers 12 --batch_size 32 --n_heads 8 --d_model 128 --d_ff 256 \

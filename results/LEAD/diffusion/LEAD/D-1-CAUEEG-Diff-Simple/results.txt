@@ -1,0 +1,13 @@
+Training Datasets: CAUEEG
+Test Datasets: CAUEEG
+Model_id: D-1-CAUEEG-Diff-Simple; Model: LEAD; Total Params: 5673579
+Average and std of validation and testing results over 1 runs
+Sample-level results: 
+Validation results --- Accuracy: 0.00+-0.00%
+Test results --- Accuracy: 0.00+-0.00%
+Subject-level results after majority voting: 
+Validation results --- Accuracy: 0.00+-0.00%
+Test results --- Accuracy: 0.00+-0.00%
+
+
+
