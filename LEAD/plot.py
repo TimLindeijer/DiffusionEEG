@@ -2,9 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Load the feature file (adjust the file path as needed)
-# feature_file = '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG/Feature/feature_01.npy'
+feature_file = '/home/stud/timlin/bhome/DiffusionEEG/results/LEAD/diffusion/LEAD/BioNaturalEEG-Diffusion-ArcMargin-hc/generated_samples_546.npy'
 # feature_file = '/home/stud/timlin/bhome/DiffusionEEG/results/LEAD/diffusion/LEAD/D-1-CAUEEG-Diff-Simple/generated_samples.npy'
-feature_file = '/home/stud/timlin/bhome/DiffusionEEG/results/LEAD/diffusion/LEAD/D-1-CAUEEG-Diff-Advanced/generated_samples.npy'
+# feature_file = '/home/stud/timlin/bhome/DiffusionEEG/results/LEAD/diffusion/LEAD/D-1-CAUEEG-Diff-Advanced/generated_samples.npy'
 features = np.load(feature_file)
 
 # Check the shape of the loaded data
@@ -39,5 +39,5 @@ plt.ylabel("Amplitude + Offset")
 plt.title("EEG Segment Visualization")
 plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
 plt.tight_layout()
-plt.savefig("Diff_LEAD_eeg_ADV.png", dpi=300)
+plt.savefig("plot.png", dpi=300)
 plt.close()

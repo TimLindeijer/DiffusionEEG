@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
-#SBATCH --time=024:00:00
-#SBATCH --job-name=D-2-CAUEEG-Diff-Advanced-Arc
-#SBATCH --output=outputs/CAUEEG_Diff_Advanced_Constraint_Arc.out
+#SBATCH --time=168:00:00
+#SBATCH --job-name=BioNaturalEEG-Diffusion
+#SBATCH --output=outputs/BioNaturalEEG_Diffusion_ArcMargin.out
  
 # Activate environment
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
@@ -13,21 +13,39 @@ conda activate LEADEEG
 # Use just one GPU for simplicity
 export CUDA_VISIBLE_DEVICES=0
 
-# Diffusion model training with simplified approach
+# Set health filter - choose one of: "all", "hc", "mci", "dementia"
+# "all" = use all data, "hc" = healthy controls only, "mci" = MCI patients only, "dementia" = dementia patients only
+HEALTH_FILTER="hc"
+
+# Set model ID based on health status
+MODEL_ID="BioNaturalEEG-Diffusion-ArcMargin"
+if [ "$HEALTH_FILTER" != "all" ]; then
+    MODEL_ID="${MODEL_ID}-${HEALTH_FILTER}"
+fi
+
+# Diffusion model training with subject conditioning, ArcMargin, enhanced naturalness
 python -u LEAD/LEAD/run.py --method LEAD --task_name diffusion --is_training 1 \
---root_path ./dataset/ --model_id D-1-CAUEEG-Diff-Advanced-Arc --model LEAD --data MultiDatasets \
+--root_path ./dataset/ --model_id $MODEL_ID --model LEAD --data MultiDatasets \
 --training_datasets CAUEEG \
 --testing_datasets CAUEEG \
 --e_layers 12 --batch_size 32 --n_heads 8 --d_model 128 --d_ff 256 \
 --seq_len 128 --enc_in 19 \
---des 'Exp' --itr 1 --learning_rate 0.0001 --train_epochs 50 --patience 15 \
---n_steps 1000 --sample_steps 50 --time_diff_constraint --init_diffusion
+--des 'Exp' --itr 1 --learning_rate 0.00005 --train_epochs 50 --patience 15 \
+--n_steps 1000 --sample_steps 200  --time_diff_constraint --init_diffusion \
+--subject_conditional \
+--arc_margin_s 30.0 --arc_margin_m 0.5 \
+--noise_content_kl_co 1.0 --arc_subject_co 0.1 --orgth_co 2.0 \
+--health_filter $HEALTH_FILTER --label_mapping "0,1,2" \
+--num_samples 546
 
-# Uncomment to run diffusion model sampling/inference
+# Uncomment to run diffusion model sampling/inference with enhanced naturalness
 # python -u LEAD/LEAD/run.py --method LEAD --task_name diffusion --is_training 0 \
-# --root_path ./dataset/ --model_id D-1-CAUEEG-Diff-Simple --model LEAD --data MultiDatasets \
+# --root_path ./dataset/ --model_id $MODEL_ID --model LEAD --data MultiDatasets \
 # --testing_datasets CAUEEG \
 # --e_layers 12 --batch_size 16 --n_heads 8 --d_model 128 --d_ff 256 \
 # --seq_len 128 --enc_in 19 \
-# --des 'Exp' --n_steps 1000 --sample_steps 50 --init_diffusion \
-# --use_multi_gpu false
+# --des 'Exp' --n_steps 1000 --sample_steps 200 \
+# --generate_samples --save_samples --samples_path ./generated_samples_${HEALTH_FILTER}/ \
+# --subject_conditional --samples_per_batch 16 --num_samples 546 \
+# --health_filter $HEALTH_FILTER --label_mapping "0,1,2" \
+# --time_diff_constraint --init_diffusion
