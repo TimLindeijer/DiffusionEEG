@@ -2,8 +2,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=168:00:00
-#SBATCH --job-name=BioNaturalEEG-Diffusion
-#SBATCH --output=outputs/BioNaturalEEG_Diffusion_ArcMargin.out
+#SBATCH --job-name=BioNaturalEEG-Diffusion-LR-0001
+#SBATCH --output=outputs/BioNaturalEEG_Diffusion_ArcMargin_LR_0001.out
  
 # Activate environment
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
@@ -18,7 +18,7 @@ export CUDA_VISIBLE_DEVICES=0
 HEALTH_FILTER="hc"
 
 # Set model ID based on health status
-MODEL_ID="BioNaturalEEG-Diffusion-ArcMargin"
+MODEL_ID="BioNaturalEEG-Diffusion-ArcMargin-LR-0001"
 if [ "$HEALTH_FILTER" != "all" ]; then
     MODEL_ID="${MODEL_ID}-${HEALTH_FILTER}"
 fi
@@ -30,7 +30,7 @@ python -u LEAD/LEAD/run.py --method LEAD --task_name diffusion --is_training 1 \
 --testing_datasets CAUEEG \
 --e_layers 12 --batch_size 32 --n_heads 8 --d_model 128 --d_ff 256 \
 --seq_len 128 --enc_in 19 \
---des 'Exp' --itr 1 --learning_rate 0.00005 --train_epochs 50 --patience 15 \
+--des 'Exp' --itr 1 --learning_rate 0.0001 --train_epochs 100 --patience 20 \
 --n_steps 1000 --sample_steps 200  --time_diff_constraint --init_diffusion \
 --subject_conditional \
 --arc_margin_s 30.0 --arc_margin_m 0.5 \
