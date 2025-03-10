@@ -17,7 +17,7 @@ Follow these steps to set up and run the LEAD repository with the CAUEEG dataset
 
 3. Install the datasets from: https://drive.google.com/drive/folders/1KffFxezXzgIw-hseMmgLFy8xE31pXpYM
 
-4. Change the LEAD.py in LEAD/LEAD/models with the LEAD.py file in the LEAD folder
+4. Change the LEAD.py in LEAD/src/models with the LEAD.py file in the LEAD folder
 
 ## Modifications
 

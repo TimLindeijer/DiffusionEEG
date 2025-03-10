@@ -24,7 +24,7 @@ if [ "$HEALTH_FILTER" != "all" ]; then
 fi
 
 # Diffusion model training with subject conditioning, ArcMargin, enhanced naturalness
-python -u LEAD/LEAD/run.py --method LEAD --task_name diffusion --is_training 1 \
+python -u LEAD/src/run.py --method LEAD --task_name diffusion --is_training 1 \
 --root_path ./dataset/ --model_id $MODEL_ID --model LEAD --data MultiDatasets \
 --training_datasets CAUEEG \
 --testing_datasets CAUEEG \
@@ -39,7 +39,7 @@ python -u LEAD/LEAD/run.py --method LEAD --task_name diffusion --is_training 1 \
 --num_samples 546
 
 # Uncomment to run diffusion model sampling/inference with enhanced naturalness
-# python -u LEAD/LEAD/run.py --method LEAD --task_name diffusion --is_training 0 \
+# python -u LEAD/src/run.py --method LEAD --task_name diffusion --is_training 0 \
 # --root_path ./dataset/ --model_id $MODEL_ID --model LEAD --data MultiDatasets \
 # --testing_datasets CAUEEG \
 # --e_layers 12 --batch_size 16 --n_heads 8 --d_model 128 --d_ff 256 \

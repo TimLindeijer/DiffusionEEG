@@ -10,7 +10,7 @@ uenv verbose cuda-11.8.0 cudnn-11.x-8.7.0
 uenv miniconda3-py39
 conda create --name LEAD39 python=3.9
 conda activate LEAD39
-pip install -r LEAD/LEAD/requirements.txt
+pip install -r LEAD/src/requirements.txt
 pip install mne
 pip install h5py
 pip uninstall torch torchvision torchaudio
