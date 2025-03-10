@@ -1,0 +1,8 @@
+Model Setting: nh8_el12_dm128_df256_seed41  
+Sample-level results: 
+Validation results --- Loss: 0.70614, Accuracy: 0.70739, Precision: 0.70765, Recall: 0.70703, F1: 0.70703, AUROC: 0.78543, AUPRC: 0.77314
+Test results --- Loss: 0.63880, Accuracy: 0.72937, Precision: 0.72730, Recall: 0.72508 F1: 0.72585, AUROC: 0.83511, AUPRC: 0.83703
+Subject-level results after majority voting: 
+Validation results, Accuracy: 0.76923, Precision: 0.77381, Recall: 0.77381, F1: 0.76923, AUROC: 0.77381, AUPRC: 0.74908
+Test results, Accuracy: 0.78571, Precision: 0.78571, Recall: 0.79167 F1: 0.78462, AUROC: 0.79167, AUPRC: 0.78571
+

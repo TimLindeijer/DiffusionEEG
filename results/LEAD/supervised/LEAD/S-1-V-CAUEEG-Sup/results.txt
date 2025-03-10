@@ -1,0 +1,24 @@
+Model Setting: nh8_el12_dm128_df256_seed41  
+Sample-level results: 
+Validation results --- Loss: 0.64732, Accuracy: 0.67944, Precision: 0.65862, Recall: 0.65569, F1: 0.65694, AUROC: 0.72969, AUPRC: 0.71104
+Test results --- Loss: 0.66313, Accuracy: 0.66972, Precision: 0.64959, Recall: 0.64883 F1: 0.64919, AUROC: 0.71501, AUPRC: 0.68871
+Subject-level results after majority voting: 
+Validation results, Accuracy: 0.70098, Precision: 0.70025, Recall: 0.68944, F1: 0.69081, AUROC: 0.68944, AUPRC: 0.67276
+Test results, Accuracy: 0.73869, Precision: 0.73792, Recall: 0.73039 F1: 0.73219, AUROC: 0.73039, AUPRC: 0.70560
+
+Model Setting: nh8_el12_dm128_df256_seed42  
+Sample-level results: 
+Validation results --- Loss: 0.65309, Accuracy: 0.67275, Precision: 0.65178, Recall: 0.64978, F1: 0.65067, AUROC: 0.72080, AUPRC: 0.69919
+Test results --- Loss: 0.65365, Accuracy: 0.66971, Precision: 0.64984, Recall: 0.64949 F1: 0.64966, AUROC: 0.71579, AUPRC: 0.68835
+Subject-level results after majority voting: 
+Validation results, Accuracy: 0.70098, Precision: 0.69933, Recall: 0.69051, F1: 0.69191, AUROC: 0.69051, AUPRC: 0.67398
+Test results, Accuracy: 0.70854, Precision: 0.70643, Recall: 0.69990 F1: 0.70129, AUROC: 0.69990, AUPRC: 0.68091
+
+Model Setting: nh8_el12_dm128_df256_seed43  
+Sample-level results: 
+Validation results --- Loss: 0.64606, Accuracy: 0.68136, Precision: 0.65918, Recall: 0.64993, F1: 0.65279, AUROC: 0.72759, AUPRC: 0.70751
+Test results --- Loss: 0.65157, Accuracy: 0.67443, Precision: 0.65224, Recall: 0.64538 F1: 0.64769, AUROC: 0.71829, AUPRC: 0.69014
+Subject-level results after majority voting: 
+Validation results, Accuracy: 0.72549, Precision: 0.73461, Recall: 0.70942, F1: 0.71078, AUROC: 0.70942, AUPRC: 0.68621
+Test results, Accuracy: 0.70352, Precision: 0.70456, Recall: 0.69106 F1: 0.69230, AUROC: 0.69106, AUPRC: 0.67253
+
