@@ -38,7 +38,7 @@ if __name__ == '__main__':
                         help="List of datasets folder names for pretraining linear probe, supervised, and finetune training.")
     parser.add_argument("--testing_datasets", type=str, default="ADFTD, BrainLat-19",
                         help="List of datasets folder names for pretraining linear probe, supervised, and finetune validation and test.")
-    parser.add_argument('--checkpoints_path', type=str, default='./checkpoints/LEAD/pretrain_lead/LEAD/P-11-Base/',
+    parser.add_argument('--checkpoints_path', type=str, default='./home/stud/timlin/bhome/DiffusionEEG/checkpoints/LEAD/diffusion/LEAD/BioNaturalEEG-Diffusion-ArcMargin-LR-0001/nh8_el12_dm128_df256_seed41/checkpoint.pth',
                         help='location of pre-trained model checkpoints')
 
     # model define for baselines

@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
-#SBATCH --time=168:00:00
+#SBATCH --time=48:00:00
 #SBATCH --job-name=BioNaturalEEG-Diffusion-PRETRAIN
 #SBATCH --output=outputs/BioNaturalEEG_Diffusion_PRETRAIN.out
  
@@ -18,7 +18,7 @@ export CUDA_VISIBLE_DEVICES=0
 HEALTH_FILTER="all"
 
 # Set model ID based on health status
-MODEL_ID="BioNaturalEEG-Diffusion-ArcMargin-LR-0001"
+MODEL_ID="BioNaturalEEG-Diffusion-PRETRAIN"
 if [ "$HEALTH_FILTER" != "all" ]; then
     MODEL_ID="${MODEL_ID}-${HEALTH_FILTER}"
 fi

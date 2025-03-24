@@ -184,7 +184,7 @@ for participant_id in valid_subjects:
                 data = raw.get_data().T
                 
                 # ---- Sample Segmentation ----
-                segments = split_eeg_segments(data, segment_length=SAMPLE_LEN, half_overlap=True)
+                segments = split_eeg_segments(data, segment_length=SAMPLE_LEN, half_overlap=False)
                 
                 # ---- Standard Normalization ----
                 segments_normalized = np.array([standard_normalize(segment) for segment in segments])
