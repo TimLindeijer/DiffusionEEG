@@ -2,7 +2,8 @@ import numpy as np
 import mne
 import matplotlib.pyplot as plt
 
-path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2/Feature/feature_01.npy'
+path = '/home/stud/timlin/bhome/DiffusionEEG/results/LEAD/diffusion/LEAD/Simplified-Diffusion-LR-0001-SS-1000-DS2-hc/generated_samples_16.npy'
+# path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2/Feature/feature_01.npy'
 
 data = np.load(path)
 sfreq = 200  # Sampling freq
@@ -28,4 +29,4 @@ psd_fig = epochs.compute_psd(method="welch", fmin=1, fmax=30).plot(average=True)
 # plt.show()
 
 # Alternative: save the plot to a file
-psd_fig.savefig('eeg_psd_plot2.png')
+psd_fig.savefig('eeg_psd_plot_DS2.png')
