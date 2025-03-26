@@ -1,0 +1,17 @@
+name: green-env
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.6
+  - pytorch>=1.9
+  - scikit-learn
+  - pandas
+  - pip
+  - pip:
+    - geotorch>=0.3.0
+    - mne>=1.8.0
+    - "lightning>=2.4.0"
+    - pytest
+    - -e .
