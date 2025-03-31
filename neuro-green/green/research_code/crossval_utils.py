@@ -12,8 +12,8 @@ from joblib import Parallel
 from joblib import delayed
 from lightning import Trainer
 from lightning.pytorch.callbacks import LearningRateFinder
-from pl_utils import GreenRegressorLM
-from pl_utils import get_train_test_loaders
+from green.research_code.pl_utils import GreenRegressorLM
+from green.research_code.pl_utils import get_train_test_loaders
 from sklearn.base import BaseEstimator
 from sklearn.model_selection import KFold
 from torch.nn import Module
