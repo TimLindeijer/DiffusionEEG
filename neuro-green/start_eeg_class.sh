@@ -2,11 +2,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=24:00:00
-#SBATCH --job-name=GREEN-EEG-Classification
-#SBATCH --output=outputs/GREEN_EEG_Classification_%j.out
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
-
+#SBATCH --job-name=GREEN-EEG-Classification-Synthetic
+#SBATCH --output=outputs/GREEN_EEG_Classification_Synthetic_%j.out
 # Activate environment (adjust based on your system)
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
 uenv miniconda3-py38
@@ -16,7 +13,7 @@ conda activate green-env
 export CUDA_VISIBLE_DEVICES=0
 
 # Set paths
-DATASET_ROOT="/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2"
+DATASET_ROOT="/home/stud/timlin/bhome/DiffusionEEG/dataset/SYNTHETIC_CAUEEG_MULTICLASS"
 FEATURE_PATH="${DATASET_ROOT}/Feature"
 LABEL_PATH="${DATASET_ROOT}/Label"
 CHECKPOINT_DIR="./checkpoints/green_model_$(date +'%Y%m%d_%H%M%S')"
