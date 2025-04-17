@@ -17,7 +17,7 @@ export CUDA_VISIBLE_DEVICES=0
 
 # Set health filter - choose one of: "all", "hc", "mci", "dementia"
 # "all" = use all data, "hc" = healthy controls only, "mci" = MCI patients only, "dementia" = dementia patients only
-HEALTH_FILTER="hc"
+HEALTH_FILTER="dementia"
 
 # Set model ID based on health status
 MODEL_ID="Simplified-Diffusion-LR-0001-SS-1000-DS2"
