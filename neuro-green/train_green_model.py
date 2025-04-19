@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-Training script for GREEN model on CAUEEG2 dataset with wandb integration.
-Fixed version that works with the standard pl_crossval function.
+Training script for GREEN model on CAUEEG2 dataset.
+Supports using separate datasets for training and testing.
 """
 
 import os
@@ -109,9 +109,13 @@ def parse_args():
     
     # Data and output directories
     parser.add_argument('--data_dir', type=str, required=True,
-                        help='Path to CAUEEG2 dataset directory')
+                        help='Path to training dataset directory')
+    parser.add_argument('--test_data_dir', type=str, default=None,
+                        help='Path to testing dataset directory (if different from training)')
     parser.add_argument('--output_dir', type=str, required=True,
                         help='Directory to save results')
+    parser.add_argument('--use_separate_test', action='store_true',
+                        help='Use separate dataset for testing')
     
     # Training parameters
     parser.add_argument('--batch_size', type=int, default=32,
@@ -122,7 +126,7 @@ def parse_args():
                         help='Weight decay for regularization')
     parser.add_argument('--max_epochs', type=int, default=100,
                         help='Maximum number of training epochs')
-    parser.add_argument('--patience', type=int, default=20,
+    parser.add_argument('--patience', type=int, default=999,
                         help='Patience for early stopping')
     
     # Model parameters
@@ -169,9 +173,29 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-def load_caueeg_data(feature_path, label_path, ch_names=None):
+def load_caueeg_data(feature_path, label_path, ch_names=None, label_prefix=""):
     """
     Load CAUEEG2 dataset and convert to mne.Epochs
+    
+    Parameters
+    ----------
+    feature_path : str
+        Path to feature directory
+    label_path : str
+        Path to label directory
+    ch_names : list, optional
+        List of channel names
+    label_prefix : str, optional
+        Prefix to add to printed labels (e.g., "Training" or "Testing")
+        
+    Returns
+    -------
+    epochs_list : list
+        List of mne.Epochs objects
+    labels_list : list
+        List of labels
+    subjects_list : list
+        List of subject identifiers
     """
     # Define default channel names if not provided
     if ch_names is None:
@@ -192,7 +216,8 @@ def load_caueeg_data(feature_path, label_path, ch_names=None):
     labels_list = []
     subjects_list = []
     
-    print(f"Found {len(feature_files)} feature files")
+    prefix = f"{label_prefix} " if label_prefix else ""
+    print(f"Found {len(feature_files)} {prefix.lower()}feature files")
     
     # Process each feature file
     for feature_file in feature_files:
@@ -226,11 +251,11 @@ def load_caueeg_data(feature_path, label_path, ch_names=None):
         labels_list.append(label)
         subjects_list.append(f"subject_{subject_id}")
     
-    print(f"Loaded {len(epochs_list)} subjects with labels")
+    print(f"Loaded {len(epochs_list)} {prefix.lower()}subjects with labels")
     
     # Print class distribution with class names
     classes, counts = np.unique(labels_list, return_counts=True)
-    print("Class distribution:")
+    print(f"{prefix}Class distribution:")
     for c, count in zip(classes, counts):
         print(f"  {CLASS_NAMES[c]}: {count} subjects")
     
@@ -361,58 +386,140 @@ def main():
         # Create a run name if not specified
         if args.wandb_name is None:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            args.wandb_name = f"GREEN_CAUEEG_{timestamp}"
+            if args.use_separate_test:
+                args.wandb_name = f"GREEN_TRANSFER_{timestamp}"
+            else:
+                args.wandb_name = f"GREEN_CAUEEG_{timestamp}"
         
         # Initialize wandb
         wandb.init(
             project=args.wandb_project,
             entity=args.wandb_entity,
             name=args.wandb_name,
-            tags=args.wandb_tags,
+            tags=args.wandb_tags + (["transfer_learning"] if args.use_separate_test else []),
             config=vars(args)
         )
         
         print(f"Initialized W&B run: {args.wandb_name}")
     
     # Set paths
-    feature_path = os.path.join(args.data_dir, 'Feature')
-    label_path = os.path.join(args.data_dir, 'Label')
+    train_feature_path = os.path.join(args.data_dir, 'Feature')
+    train_label_path = os.path.join(args.data_dir, 'Label')
     
-    # Check that paths exist
-    if not os.path.exists(feature_path):
-        raise FileNotFoundError(f"Feature directory not found: {feature_path}")
-    if not os.path.exists(label_path):
-        raise FileNotFoundError(f"Label directory not found: {label_path}")
+    # Check that training paths exist
+    if not os.path.exists(train_feature_path):
+        raise FileNotFoundError(f"Training feature directory not found: {train_feature_path}")
+    if not os.path.exists(train_label_path):
+        raise FileNotFoundError(f"Training label directory not found: {train_label_path}")
     
-    print(f"Loading data from {args.data_dir}")
+    print(f"Loading training data from {args.data_dir}")
     
-    # Load data
-    epochs_list, labels_list, subjects_list = load_caueeg_data(feature_path, label_path)
+    # Load training data
+    train_epochs_list, train_labels_list, train_subjects_list = load_caueeg_data(
+        train_feature_path, train_label_path, label_prefix="Training")
+    
+    # Handle test dataset
+    if args.use_separate_test:
+        if args.test_data_dir is None:
+            raise ValueError("--test_data_dir must be provided when --use_separate_test is set")
+            
+        test_feature_path = os.path.join(args.test_data_dir, 'Feature')
+        test_label_path = os.path.join(args.test_data_dir, 'Label')
+        
+        # Check that test paths exist
+        if not os.path.exists(test_feature_path):
+            raise FileNotFoundError(f"Testing feature directory not found: {test_feature_path}")
+        if not os.path.exists(test_label_path):
+            raise FileNotFoundError(f"Testing label directory not found: {test_label_path}")
+        
+        print(f"Loading testing data from {args.test_data_dir}")
+        
+        # Load testing data
+        test_epochs_list, test_labels_list, test_subjects_list = load_caueeg_data(
+            test_feature_path, test_label_path, label_prefix="Testing")
+            
+        # Use all training data for training
+        train_indices = [list(range(len(train_epochs_list)))]
+        # Use all testing data for testing
+        test_indices = [list(range(len(test_epochs_list)))]
+        
+        # Create combined dataset for pl_crossval
+        all_epochs_list = train_epochs_list + test_epochs_list
+        all_labels_list = train_labels_list + test_labels_list
+        all_subjects_list = train_subjects_list + test_subjects_list
+        
+        # Print number of subjects in each set
+        print(f"Using {len(train_indices[0])} subjects for training and {len(test_indices[0])} subjects for testing")
+        
+        # Adjust test indices to account for offset
+        test_indices = [[i + len(train_epochs_list) for i in idx] for idx in test_indices]
+    else:
+        # Using same dataset for training and testing (split approach)
+        all_epochs_list = train_epochs_list
+        all_labels_list = train_labels_list
+        all_subjects_list = train_subjects_list
+        
+        # Split data into train/test (80/20)
+        n_subjects = len(all_epochs_list)
+        n_train = int(0.8 * n_subjects)
+        
+        indices = list(range(n_subjects))
+        np.random.shuffle(indices)
+        
+        train_indices = [indices[:n_train]]
+        test_indices = [indices[n_train:]]
+        
+        # Print number of subjects in each set
+        print(f"Using {len(train_indices[0])} subjects for training and {len(test_indices[0])} subjects for testing")
     
     # Convert labels to one-hot encoding
     targets = [torch.tensor([1 if i == label else 0 for i in range(3)], dtype=torch.float32) 
-              for label in labels_list]
+              for label in all_labels_list]
     
     # Create dataset
     dataset = EpochsDataset(
-        epochs=epochs_list,
+        epochs=all_epochs_list,
         targets=targets,
-        subjects=subjects_list,
+        subjects=all_subjects_list,
         n_epochs=10,  # Use 10 epochs per subject
         padding='repeat'
     )
     
     # Log dataset information to wandb
     if args.use_wandb:
-        classes, counts = np.unique(labels_list, return_counts=True)
-        class_distribution = {CLASS_NAMES[c]: int(count) for c, count in zip(classes, counts)}
+        # Log training data distribution
+        train_classes, train_counts = np.unique([all_labels_list[i] for i in train_indices[0]], return_counts=True)
+        train_distribution = {CLASS_NAMES[c]: int(count) for c, count in zip(train_classes, train_counts)}
+        
+        # Log testing data distribution
+        test_classes, test_counts = np.unique([all_labels_list[i] for i in test_indices[0]], return_counts=True)
+        test_distribution = {CLASS_NAMES[c]: int(count) for c, count in zip(test_classes, test_counts)}
+        
         wandb.log({
             "dataset_size": len(dataset),
-            "dataset_class_distribution": class_distribution
+            "train_size": len(train_indices[0]),
+            "test_size": len(test_indices[0]),
+            "train_distribution": train_distribution,
+            "test_distribution": test_distribution,
+            "using_separate_test": args.use_separate_test
         })
     
+    # Print label distribution in train/test sets with class names
+    train_labels = [all_labels_list[i] for i in train_indices[0]]
+    test_labels = [all_labels_list[i] for i in test_indices[0]]
+    
+    print("Train set label distribution:")
+    train_classes, train_counts = np.unique(train_labels, return_counts=True)
+    for c, count in zip(train_classes, train_counts):
+        print(f"  {CLASS_NAMES[c]}: {count} subjects")
+    
+    print("Test set label distribution:")
+    test_classes, test_counts = np.unique(test_labels, return_counts=True)
+    for c, count in zip(test_classes, test_counts):
+        print(f"  {CLASS_NAMES[c]}: {count} subjects")
+    
     # Number of channels from the first epochs object
-    n_ch = len(epochs_list[0].ch_names)
+    n_ch = len(all_epochs_list[0].ch_names)
     print(f"Using {n_ch} EEG channels")
     
     # Create model for 3-class classification
@@ -452,51 +559,10 @@ def main():
     # Choose the LM class based on wandb usage
     pl_module = WandbGreenClassifierLM if args.use_wandb else GreenClassifierLM
     
-    # Setup cross-validation
-    # Split data into train/test (80/20)
-    n_subjects = len(epochs_list)
-    n_train = int(0.8 * n_subjects)
-    
-    indices = list(range(n_subjects))
-    np.random.shuffle(indices)
-    
-    train_indices = [indices[:n_train]]
-    test_indices = [indices[n_train:]]
-    
-    # Print split information
-    print(f"Training on {len(train_indices[0])} subjects, testing on {len(test_indices[0])} subjects")
-    
-    # Print label distribution in train/test sets with class names
-    train_labels = [labels_list[i] for i in train_indices[0]]
-    test_labels = [labels_list[i] for i in test_indices[0]]
-    
-    print("Train set label distribution:")
-    train_classes, train_counts = np.unique(train_labels, return_counts=True)
-    train_distribution = {}
-    for c, count in zip(train_classes, train_counts):
-        print(f"  {CLASS_NAMES[c]}: {count} subjects")
-        train_distribution[CLASS_NAMES[c]] = int(count)
-    
-    print("Test set label distribution:")
-    test_classes, test_counts = np.unique(test_labels, return_counts=True)
-    test_distribution = {}
-    for c, count in zip(test_classes, test_counts):
-        print(f"  {CLASS_NAMES[c]}: {count} subjects")
-        test_distribution[CLASS_NAMES[c]] = int(count)
-    
-    # Log split information to wandb
-    if args.use_wandb:
-        wandb.log({
-            "train_size": len(train_indices[0]),
-            "test_size": len(test_indices[0]),
-            "train_distribution": train_distribution,
-            "test_distribution": test_distribution
-        })
-    
     # Start timing
     start_time = time.time()
     
-    # Train model with the fixed approach (no logger parameter)
+    # Train model
     pl_crossval_output, _ = pl_crossval(
         model, 
         dataset=dataset,
