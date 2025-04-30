@@ -72,28 +72,64 @@ def print_gpu_memory_report():
 
 def file_convert_to_mne(numpy_epoch, name='Original Dataset', id_channel=None):
     """
+    Convert numpy array to MNE EpochsArray
 
     Parameters
     ----------
-    list_epoch: list
+    numpy_epoch: numpy.ndarray
+        EEG data array with shape (n_epochs, n_channels, n_times) or (n_epochs, n_times, n_channels)
     name: str
+        Description for the dataset
+    id_channel: int, optional
+        Channel ID if only one channel is used
 
     Returns
     -------
     epochs: mne.EpochsArray
     """
+    import numpy as np
+    import mne
 
-    #numpy_epoch = np.concatenate(list_epoch)
-    if id_channel is not None:
-        ch_names = [f'EEG {id_channel}']
+    # Print shape for debugging
+    print(f"Converting {name} data with shape {numpy_epoch.shape}")
+    
+    # For CAUEEG2 data, we expect (batch, channels, time_points)
+    # Determine the number of channels from the data shape
+    if len(numpy_epoch.shape) == 3:
+        n_channels = numpy_epoch.shape[1]  # Assuming PyTorch convention (batch, channels, time)
+    elif len(numpy_epoch.shape) == 2:
+        # Single-channel data with shape (batch, time)
+        n_channels = 1
+        # Reshape to add channel dimension
+        numpy_epoch = numpy_epoch.reshape(numpy_epoch.shape[0], 1, numpy_epoch.shape[1])
     else:
-        ch_names = 1
-    info = mne.create_info(ch_names, ch_types=['eeg'], sfreq=100)
+        raise ValueError(f"Unexpected data shape: {numpy_epoch.shape}")
+    
+    # Create appropriate channel names based on actual data
+    if id_channel is not None:
+        # Single specified channel
+        ch_names = [f'EEG {id_channel}']
+        if n_channels != 1:
+            print(f"Warning: id_channel specified but data has {n_channels} channels")
+            # Create channel names for all channels
+            ch_names = [f'EEG {i+1}' for i in range(n_channels)]
+    else:
+        # Create generic channel names for each channel in the data
+        ch_names = [f'EEG {i+1}' for i in range(n_channels)]
+    
+    # Create MNE info object with the correct number of channels
+    info = mne.create_info(ch_names, ch_types=['eeg'] * n_channels, sfreq=200)
     info['description'] = name
-
-    epochs = mne.EpochsArray(numpy_epoch, info)
-
-    return epochs
+    
+    # Create and return EpochsArray
+    try:
+        epochs = mne.EpochsArray(numpy_epoch, info)
+        print(f"Successfully created EpochsArray with {n_channels} channels")
+        return epochs
+    except ValueError as e:
+        print(f"Error creating EpochsArray: {e}")
+        print(f"Data shape: {numpy_epoch.shape}, Number of channels in info: {len(ch_names)}")
+        raise
 
 
 def get_epochs_spectrum(eeg_data, recons):

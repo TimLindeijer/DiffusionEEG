@@ -1,5 +1,5 @@
 """
-Author: Bruno Aristimunha (Modified to fix NaN issues)
+Author: Bruno Aristimunha (Modified with ultra-stable training)
 Training AutoEncoder KL with SleepEDFx or SHHS data.
 Based on the tutorial from Monai Generative.
 """
@@ -7,6 +7,7 @@ import argparse
 import ast
 import time
 import os
+import math
 from generative.losses import JukeboxLoss, PatchAdversarialLoss
 from generative.networks.nets import AutoencoderKL, PatchDiscriminator
 from monai.config import print_config
@@ -23,6 +24,7 @@ from util import log_mlflow, log_reconstructions, log_spectral, ParseListAction,
 set_determinism(42)
 
 import torch
+import torch.nn.functional as F
 
 if os.path.exists('/project'):
     base_path = '/project/'
@@ -36,6 +38,15 @@ class ParseListAction(argparse.Action):
         parsed_list = ast.literal_eval(values)
         setattr(namespace, self.dest, parsed_list)
 
+def init_weights(m):
+    """Initialize model weights for better training stability"""
+    if isinstance(m, (torch.nn.Conv1d, torch.nn.Conv2d, torch.nn.Linear)):
+        torch.nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+        if m.bias is not None:
+            torch.nn.init.constant_(m.bias, 0)
+    elif isinstance(m, (torch.nn.BatchNorm1d, torch.nn.BatchNorm2d, torch.nn.LayerNorm)):
+        torch.nn.init.constant_(m.weight, 1)
+        torch.nn.init.constant_(m.bias, 0)
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -99,7 +110,7 @@ def parse_args():
         help="Label filter for CAUEEG2 dataset. Can be 'hc' (healthy), 'mci', 'dementia', or a comma-separated list"
     )
     
-    # New arguments for numerical stability
+    # Arguments for numerical stability
     parser.add_argument(
         "--clip_grad",
         type=float,
@@ -112,6 +123,49 @@ def parse_args():
         type=float,
         default=1e2,
         help="Maximum value for spectral weight to prevent instability"
+    )
+    
+    # New stability parameters
+    parser.add_argument(
+        "--weight_decay",
+        type=float,
+        default=1e-5,
+        help="Weight decay for optimizers"
+    )
+    
+    parser.add_argument(
+        "--loss_scale",
+        type=float,
+        default=0.1,
+        help="Scale factor for losses to prevent NaN"
+    )
+    
+    parser.add_argument(
+        "--clamp_z_mu",
+        type=float,
+        default=5.0,
+        help="Clamp z_mu values to +/- this value"
+    )
+    
+    parser.add_argument(
+        "--clamp_z_sigma",
+        type=float,
+        default=10.0,
+        help="Clamp z_sigma values between 0.1 and this value"
+    )
+    
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=None,
+        help="Override batch size for stability"
+    )
+    
+    parser.add_argument(
+        "--warmup_epochs",
+        type=int,
+        default=10,
+        help="Number of warmup epochs for learning rate"
     )
     
     args = parser.parse_args()
@@ -127,6 +181,11 @@ def main(args):
     config = OmegaConf.load(args.config_file)
     set_determinism(seed=config.train.seed)
     print_config()
+
+    # Override batch size if specified
+    if args.batch_size is not None:
+        config.train.batch_size = args.batch_size
+        print(f"Overriding batch size to: {config.train.batch_size}")
 
     # Add suffix to run_dir based on label filter for easier identification
     if args.dataset == "caueeg2" and hasattr(args, 'label_filter') and args.label_filter:
@@ -166,6 +225,12 @@ def main(args):
     discriminator_dict = config.patchdiscriminator.params
 
     discriminator = PatchDiscriminator(**discriminator_dict)
+    
+    # Apply weight initialization for better stability
+    if not resume:
+        print("Applying custom weight initialization for stability")
+        model.apply(init_weights)
+        discriminator.apply(init_weights)
 
     print(f"Let's use {torch.cuda.device_count()} GPUs!")
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -177,10 +242,20 @@ def main(args):
     model = model.to(device)
     discriminator = discriminator.to(device)
 
-    optimizer_g = torch.optim.Adam(params=model.parameters(),
-                                   lr=config.models.optimizer_g_lr)
-    optimizer_d = torch.optim.Adam(params=discriminator.parameters(),
-                                   lr=config.models.optimizer_d_lr)
+    # Use AdamW instead of Adam for better regularization
+    optimizer_g = torch.optim.AdamW(
+        params=model.parameters(),
+        lr=config.models.optimizer_g_lr,
+        weight_decay=args.weight_decay,
+        eps=1e-8  # Increased epsilon for numerical stability
+    )
+    
+    optimizer_d = torch.optim.AdamW(
+        params=discriminator.parameters(),
+        lr=config.models.optimizer_d_lr,
+        weight_decay=args.weight_decay,
+        eps=1e-8  # Increased epsilon for numerical stability
+    )
     
     # Add learning rate schedulers for better stability
     scheduler_g = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -206,6 +281,7 @@ def main(args):
     spectral_weight = min(spectral_weight, args.spectral_cap)
     print(f"Using spectral weight: {spectral_weight} (capped at {args.spectral_cap})")
     
+    # Initialize loss tracking lists
     epoch_recon_loss_list = []
     epoch_gen_loss_list = []
     epoch_disc_loss_list = []
@@ -213,6 +289,27 @@ def main(args):
     val_recon_epoch_loss_list = []
     best_loss = float("inf")
     start_epoch = 0
+    
+    # Initialize EMA trackers for smoother loss trends
+    ema_recon_loss = None
+    ema_gen_loss = None
+    ema_disc_loss = None
+    ema_spectral_loss = None
+    ema_decay = 0.95  # Decay factor for EMA
+    
+    # Function to update EMA values
+    def update_ema(current_ema, new_value, decay=0.95):
+        if current_ema is None:
+            return new_value
+        return current_ema * decay + new_value * (1 - decay)
+    
+    # Function to get learning rate factor for warmup
+    def get_lr_factor(current_epoch, warmup_epochs):
+        if current_epoch < warmup_epochs:
+            return float(current_epoch + 1) / float(max(1, warmup_epochs))
+        return 1.0
+    
+    # Resume from checkpoint if available
     if resume:
         print(f"Using checkpoint!")
         checkpoint = torch.load(str(run_dir / "checkpoint.pth"))
@@ -223,6 +320,13 @@ def main(args):
         start_epoch = checkpoint["epoch"]
         best_loss = checkpoint["best_loss"]
         init_batch = checkpoint["init_batch"]
+        
+        # Try to load EMA values if they exist
+        if "ema_recon_loss" in checkpoint:
+            ema_recon_loss = checkpoint["ema_recon_loss"]
+            ema_gen_loss = checkpoint["ema_gen_loss"]
+            ema_disc_loss = checkpoint["ema_disc_loss"]
+            ema_spectral_loss = checkpoint["ema_spectral_loss"]
     else:
         print(f"No checkpoint found.")
 
@@ -243,7 +347,7 @@ def main(args):
         init_batch = init_batch_raw[:, :, 36:-36]
 
     # Define epsilon for numerical stability
-    eps = 1e-6
+    eps = 1e-8
 
     for epoch in range(start_epoch, n_epochs):
         model.train()
@@ -256,6 +360,16 @@ def main(args):
         # Count batches with NaN values for monitoring
         nan_batches = 0
         total_batches = 0
+        
+        # Get learning rate warmup factor
+        lr_factor = get_lr_factor(epoch, args.warmup_epochs)
+        if lr_factor < 1.0:
+            # Apply warmup to learning rates
+            for param_group in optimizer_g.param_groups:
+                param_group['lr'] = config.models.optimizer_g_lr * lr_factor
+            for param_group in optimizer_d.param_groups:
+                param_group['lr'] = config.models.optimizer_d_lr * lr_factor
+            print(f"Warmup epoch {epoch+1}/{args.warmup_epochs}, LR factor: {lr_factor:.4f}")
         
         progress_bar = tqdm(enumerate(train_loader), total=len(train_loader), ncols=150)
         progress_bar.set_description(f"Epoch {epoch}")
@@ -295,46 +409,71 @@ def main(args):
                     print(f"Warning: NaN detected in model outputs (batch {step}), skipping")
                     nan_batches += 1
                     continue
+                
+                # Clamp z_mu and z_sigma values to prevent extreme values
+                z_mu = torch.clamp(z_mu, -args.clamp_z_mu, args.clamp_z_mu)
+                z_sigma = torch.clamp(z_sigma, 0.1, args.clamp_z_sigma)
 
                 # Calculate losses with numerical stability
                 recons_loss = l1_loss(reconstruction.float(), eeg_data.float())
+                # Scale down loss for stability
+                recons_loss = recons_loss * args.loss_scale
                 
                 # Use try-except blocks for potentially unstable operations
                 try:
                     recons_spectral = jukebox_loss(reconstruction.float(), eeg_data.float())
+                    # Scale down for stability
+                    recons_spectral = recons_spectral * args.loss_scale
+                    
                     if torch.isnan(recons_spectral):
                         print(f"Warning: NaN in spectral loss, using default value")
-                        recons_spectral = torch.tensor(1.0, device=device)
+                        recons_spectral = torch.tensor(1.0 * args.loss_scale, device=device)
                 except Exception as e:
                     print(f"Exception in spectral loss: {e}, using default value")
-                    recons_spectral = torch.tensor(1.0, device=device)
+                    recons_spectral = torch.tensor(1.0 * args.loss_scale, device=device)
                 
                 # Calculate KL loss with numerical stability
                 try:
-                    # Add epsilon to prevent log(0)
-                    kl_loss = 0.5 * torch.sum(z_mu.pow(2) + z_sigma.pow(2) - torch.log(z_sigma.pow(2) + eps) - 1, dim=[1])
-                    kl_loss = torch.sum(kl_loss) / max(kl_loss.shape[0], 1)  # Prevent division by zero
+                    # Use a more numerically stable version
+                    kl_loss = 0.5 * torch.sum(
+                        z_mu.pow(2) + z_sigma.pow(2) - torch.log(z_sigma.pow(2) + eps) - 1, 
+                        dim=[1]
+                    )
+                    kl_loss = torch.mean(kl_loss)  # Use mean instead of sum for better stability
+                    # Scale down for stability
+                    kl_loss = kl_loss * args.loss_scale
+                    
                     if torch.isnan(kl_loss):
                         print(f"Warning: NaN in KL loss, using default value")
-                        kl_loss = torch.tensor(0.01, device=device)
+                        kl_loss = torch.tensor(0.01 * args.loss_scale, device=device)
                 except Exception as e:
                     print(f"Exception in KL loss: {e}, using default value")
-                    kl_loss = torch.tensor(0.01, device=device)
+                    kl_loss = torch.tensor(0.01 * args.loss_scale, device=device)
 
                 # Adversarial loss
                 try:
                     logits_fake = discriminator(reconstruction.contiguous().float())[-1]
                     generator_loss = adv_loss(logits_fake, target_is_real=True, for_discriminator=False)
+                    # Scale down for stability
+                    generator_loss = generator_loss * args.loss_scale
+                    
                     if torch.isnan(generator_loss):
                         print(f"Warning: NaN in generator loss, using default value")
-                        generator_loss = torch.tensor(0.1, device=device)
+                        generator_loss = torch.tensor(0.1 * args.loss_scale, device=device)
                 except Exception as e:
                     print(f"Exception in generator loss: {e}, using default value")
-                    generator_loss = torch.tensor(0.1, device=device)
+                    generator_loss = torch.tensor(0.1 * args.loss_scale, device=device)
 
-                # Combine losses with spectral weight cap
+                # Combine losses with spectral weight cap and dynamic factor
                 if args.spe == "spectral":
-                    loss_g = recons_loss + kl_weight * kl_loss + adv_weight * generator_loss + recons_spectral * spectral_weight
+                    # Start with very small spectral weight and gradually increase
+                    effective_spectral_weight = min(spectral_weight, 
+                                                   spectral_weight * lr_factor * 0.1)  # Further reduce in early epochs
+                    
+                    loss_g = (recons_loss + 
+                             kl_weight * kl_loss + 
+                             adv_weight * generator_loss + 
+                             effective_spectral_weight * recons_spectral)
                 else:
                     loss_g = recons_loss + kl_weight * kl_loss + adv_weight * generator_loss 
                 
@@ -347,6 +486,19 @@ def main(args):
                 # Backward pass with gradient clipping
                 loss_g.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.clip_grad)
+                
+                # Check for NaN in gradients before step
+                has_nan_grad = False
+                for param in model.parameters():
+                    if param.grad is not None and torch.isnan(param.grad).any():
+                        has_nan_grad = True
+                        break
+                        
+                if has_nan_grad:
+                    print(f"Warning: NaN in generator gradients (batch {step}), skipping optimizer step")
+                    nan_batches += 1
+                    continue
+                    
                 optimizer_g.step()
 
                 # Discriminator part
@@ -359,9 +511,12 @@ def main(args):
                     loss_d_real = adv_loss(logits_real, target_is_real=True, for_discriminator=True)
                     discriminator_loss = (loss_d_fake + loss_d_real) * 0.5
                     
+                    # Scale down for stability
+                    discriminator_loss = discriminator_loss * args.loss_scale
+                    
                     if torch.isnan(discriminator_loss):
                         print(f"Warning: NaN in discriminator loss (batch {step}), skipping")
-                        discriminator_loss = torch.tensor(0.1, device=device)
+                        discriminator_loss = torch.tensor(0.1 * args.loss_scale, device=device)
                         
                     loss_d = adv_weight * discriminator_loss
                     
@@ -371,23 +526,42 @@ def main(args):
                         
                     loss_d.backward()
                     torch.nn.utils.clip_grad_norm_(discriminator.parameters(), max_norm=args.clip_grad)
+                    
+                    # Check for NaN in gradients before step
+                    has_nan_grad = False
+                    for param in discriminator.parameters():
+                        if param.grad is not None and torch.isnan(param.grad).any():
+                            has_nan_grad = True
+                            break
+                            
+                    if has_nan_grad:
+                        print(f"Warning: NaN in discriminator gradients (batch {step}), skipping optimizer step")
+                        continue
+                        
                     optimizer_d.step()
                 except Exception as e:
                     print(f"Exception in discriminator update: {e}, skipping")
                     continue
 
-                # Update metrics
-                epoch_loss += recons_loss.item()
-                gen_epoch_loss += generator_loss.item()
-                disc_epoch_loss += discriminator_loss.item()
-                spectral_epoch_loss += recons_spectral.item()
+                # Update metrics using original loss values
+                epoch_loss += recons_loss.item() / args.loss_scale  # Scale back to original magnitude
+                gen_epoch_loss += generator_loss.item() / args.loss_scale
+                disc_epoch_loss += discriminator_loss.item() / args.loss_scale
+                spectral_epoch_loss += recons_spectral.item() / args.loss_scale
+                
+                # Update EMA values for smoother loss tracking
+                ema_recon_loss = update_ema(ema_recon_loss, recons_loss.item() / args.loss_scale, ema_decay)
+                ema_gen_loss = update_ema(ema_gen_loss, generator_loss.item() / args.loss_scale, ema_decay)
+                ema_disc_loss = update_ema(ema_disc_loss, discriminator_loss.item() / args.loss_scale, ema_decay)
+                ema_spectral_loss = update_ema(ema_spectral_loss, recons_spectral.item() / args.loss_scale, ema_decay)
 
+                # Show EMA values in progress bar for smoother updates
                 progress_bar.set_postfix(
                     {
-                        "l1_loss": epoch_loss / (step + 1),  # L1 loss
-                        "gen_loss": gen_epoch_loss / (step + 1),  # Generator loss, adv_loss
-                        "disc_loss": disc_epoch_loss / (step + 1),  # Discriminator loss, adv_loss
-                        "spec_loss": spectral_epoch_loss / (step + 1),  # Spectral loss, jukebox_loss
+                        "l1_loss": ema_recon_loss,
+                        "gen_loss": ema_gen_loss,
+                        "disc_loss": ema_disc_loss,
+                        "spec_loss": ema_spectral_loss,
                     }
                 )
             except Exception as e:
@@ -422,8 +596,10 @@ def main(args):
                     if args.dataset == "caueeg2":
                         vis_init = init_batch
                         vis_init_recon = reconstruction_init
-                        # Add slicing if needed and not already applied
-                        if vis_init.dim() == 3 and hasattr(init_batch, 'shape') and init_batch.shape[2] > 72 and '36:-36' not in locals().get('init_batch', ''):
+                        # Check if slicing is needed based on the shape
+                        if vis_init.dim() == 3 and vis_init.shape[2] > 72:
+                            # Torch tensors don't have a way to check if slicing was applied
+                            # So just check the actual size to determine if slicing is needed
                             vis_init = vis_init[:, :, 36:-36]
                             vis_init_recon = vis_init_recon[:, :, 36:-36]
                     else:
@@ -458,6 +634,7 @@ def main(args):
         writer_train.add_scalar("recons_loss", epoch_loss / max(step + 1 - nan_batches, 1), epoch * len(train_loader) + step)
         writer_train.add_scalar("recons_spectral", spectral_epoch_loss / max(step + 1 - nan_batches, 1), epoch * len(train_loader) + step)
         writer_train.add_scalar("nan_percentage", nan_percentage, epoch)
+        writer_train.add_scalar("lr_factor", lr_factor, epoch)
 
         epoch_recon_loss_list.append(epoch_loss / max(step + 1 - nan_batches, 1))
         epoch_gen_loss_list.append(gen_epoch_loss / max(step + 1 - nan_batches, 1))
@@ -530,9 +707,6 @@ def main(args):
                     except Exception as e:
                         print(f"Error in validation batch {val_step}: {e}, skipping")
                         continue
-
-                    if device.type == 'cuda':
-                        print_gpu_memory_report()
                     
                     # Save checkpoint
                     checkpoint = {
@@ -543,6 +717,10 @@ def main(args):
                         "optimizer_d": optimizer_d.state_dict(),
                         "best_loss": best_loss,
                         "init_batch": init_batch,
+                        "ema_recon_loss": ema_recon_loss,
+                        "ema_gen_loss": ema_gen_loss,
+                        "ema_disc_loss": ema_disc_loss,
+                        "ema_spectral_loss": ema_spectral_loss
                     }
                     torch.save(checkpoint, str(run_dir / "checkpoint.pth"))
 
@@ -555,9 +733,10 @@ def main(args):
                     old_lr_g = optimizer_g.param_groups[0]['lr']
                     old_lr_d = optimizer_d.param_groups[0]['lr']
 
-                    # Update learning rate schedulers
-                    scheduler_g.step(final_val_loss)
-                    scheduler_d.step(final_val_loss)
+                    # Update learning rate schedulers only after warmup
+                    if epoch >= args.warmup_epochs:
+                        scheduler_g.step(final_val_loss)
+                        scheduler_d.step(final_val_loss)
 
                     # Manual verbose logging
                     new_lr_g = optimizer_g.param_groups[0]['lr']

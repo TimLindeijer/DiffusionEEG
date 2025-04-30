@@ -79,6 +79,11 @@ def train_dataloader(config, args, transforms_list, dataset):
         # Use the function for CAUEEG2 with label filtering
         label_filter = args.label_filter if hasattr(args, 'label_filter') else None
         all_dicts = get_caueeg2_datalist(args.path_pre_processed, label_filter)
+        
+        # Handle empty dataset case
+        if not all_dicts:
+            raise ValueError("Training dataset is empty after applying label filter. Check available labels using the debug script.")
+            
         # Use the first 80% for training
         train_size = int(0.8 * len(all_dicts))
         train_dicts = all_dicts[:train_size]
@@ -108,6 +113,11 @@ def valid_dataloader(config, args, transforms_list, dataset):
         # Use the function for CAUEEG2 with label filtering
         label_filter = args.label_filter if hasattr(args, 'label_filter') else None
         all_dicts = get_caueeg2_datalist(args.path_pre_processed, label_filter)
+        
+        # Handle empty dataset case
+        if not all_dicts:
+            raise ValueError("Validation dataset is empty after applying label filter. Check available labels using the debug script.")
+            
         # Use the last 20% for validation
         train_size = int(0.8 * len(all_dicts))
         valid_dicts = all_dicts[train_size:]
@@ -171,49 +181,83 @@ def get_caueeg2_datalist(base_path, label_filter=None):
     feature_files = glob.glob(os.path.join(base_path, 'Feature', 'feature_*.npy'))
     feature_files.sort()
     
+    if not feature_files:
+        raise ValueError(f"No feature files found in {os.path.join(base_path, 'Feature')}. Check the path.")
+    
     # Load labels
     labels_path = os.path.join(base_path, 'Label', 'label.npy')
     if os.path.exists(labels_path):
-        labels = np.load(labels_path)
-        # Create a dictionary mapping subject_id to label
-        label_dict = {int(subject_id): int(label) for label, subject_id in labels}
-        
-        # Process label filter if provided
-        if label_filter is not None:
-            if isinstance(label_filter, (list, tuple)):
-                # Convert string labels to integers if needed
-                numeric_filters = []
-                for filt in label_filter:
-                    if filt == 'hc' or filt == 'healthy' or filt == 'healthy controls':
-                        numeric_filters.append(0)
-                    elif filt == 'mci':
-                        numeric_filters.append(1)
-                    elif filt == 'dementia':
-                        numeric_filters.append(2)
-                    elif isinstance(filt, (int, float)):
-                        numeric_filters.append(int(filt))
-                label_filter = numeric_filters
-            else:
-                # Single filter value
-                if label_filter == 'hc' or label_filter == 'healthy' or label_filter == 'healthy controls':
-                    label_filter = [0]
-                elif label_filter == 'mci':
-                    label_filter = [1]
-                elif label_filter == 'dementia':
-                    label_filter = [2]
-                elif isinstance(label_filter, (int, float)):
-                    label_filter = [int(label_filter)]
+        try:
+            labels = np.load(labels_path)
+            print(f"Loaded labels with shape: {labels.shape}")
+            
+            # Create a dictionary mapping subject_id to label
+            label_dict = {int(subject_id): int(label) for label, subject_id in labels}
+            print(f"Created label dictionary with {len(label_dict)} entries")
+            
+            # Process label filter if provided
+            if label_filter is not None:
+                if isinstance(label_filter, (list, tuple)):
+                    # Convert string labels to integers if needed
+                    numeric_filters = []
+                    for filt in label_filter:
+                        if filt == 'hc' or filt == 'healthy' or filt == 'healthy controls':
+                            numeric_filters.append(0)
+                        elif filt == 'mci':
+                            numeric_filters.append(1)
+                        elif filt == 'dementia':
+                            numeric_filters.append(2)
+                        elif isinstance(filt, (int, float)):
+                            numeric_filters.append(int(filt))
+                    label_filter = numeric_filters
                 else:
-                    try:
+                    # Single filter value
+                    if label_filter == 'hc' or label_filter == 'healthy' or label_filter == 'healthy controls':
+                        label_filter = [0]
+                    elif label_filter == 'mci':
+                        label_filter = [1]
+                    elif label_filter == 'dementia':
+                        label_filter = [2]
+                    elif isinstance(label_filter, (int, float)):
                         label_filter = [int(label_filter)]
-                    except:
-                        print(f"Warning: Unrecognized label filter '{label_filter}'. Using all labels.")
-                        label_filter = None
+                    else:
+                        try:
+                            label_filter = [int(label_filter)]
+                        except:
+                            print(f"Warning: Unrecognized label filter '{label_filter}'. Using all labels.")
+                            label_filter = None
+        except Exception as e:
+            print(f"Error loading labels: {e}")
+            label_dict = {}
+            label_filter = None
     else:
         print(f"Warning: Labels file not found at {labels_path}")
         label_dict = {}
         label_filter = None
     
+    # Analyze available labels before filtering
+    all_subject_labels = {}
+    for file_path in feature_files:
+        filename = os.path.basename(file_path)
+        subject_id = int(filename.split('_')[1].split('.')[0])
+        label = label_dict.get(subject_id, -1)
+        all_subject_labels[subject_id] = label
+    
+    # Count available labels
+    label_counts = {}
+    for subject_id, label in all_subject_labels.items():
+        if label in label_counts:
+            label_counts[label] += 1
+        else:
+            label_counts[label] = 1
+            
+    # Show available labels
+    label_names = {0: 'Healthy', 1: 'MCI', 2: 'Dementia', -1: 'Unknown'}
+    print("Available labels in dataset:")
+    for label, count in label_counts.items():
+        print(f"  - {label_names.get(label, f'Unknown-{label}')} (label={label}): {count} subjects")
+    
+    # Build filtered dataset
     data_dicts = []
     for file_path in feature_files:
         # Extract subject_id from filename (e.g., feature_01.npy -> 1)
@@ -236,10 +280,28 @@ def get_caueeg2_datalist(base_path, label_filter=None):
     
     # Print summary of selected data
     if label_filter is not None:
-        label_names = {0: 'Healthy', 1: 'MCI', 2: 'Dementia'}
         included_labels = [label_names.get(l, f"Unknown-{l}") for l in label_filter]
+        
+        # Check if we have an empty dataset after filtering
+        if not data_dicts:
+            print(f"ERROR: No data found matching label filter: {', '.join(included_labels)}")
+            print("Please choose from the available labels listed above.")
+            print("Example usage: --label_filter hc  or  --label_filter mci  or  --label_filter 0,1")
+            
+            # Instead of raising an error, return an empty list
+            # The calling function can handle this case
+            return []
+            
         print(f"Selected {len(data_dicts)} files with labels: {', '.join(included_labels)}")
     else:
         print(f"Found {len(data_dicts)} files for CAUEEG2 dataset (all labels).")
+    
+    # Try to load one file to check its shape
+    if data_dicts:
+        try:
+            sample_data = np.load(data_dicts[0]["eeg"])
+            print(f"Sample data shape: {sample_data.shape}")
+        except Exception as e:
+            print(f"Could not load sample file: {e}")
     
     return data_dicts
