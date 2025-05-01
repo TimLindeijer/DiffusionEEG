@@ -6,20 +6,23 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tensorboardX import SummaryWriter
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import autocast
+from torch.cuda.amp import GradScaler
 from tqdm import tqdm
 from util import log_ldm_sample_unconditioned, log_diffusion_sample_unconditioned, print_gpu_memory_report, get_lr
 
 
 class Stage1Wrapper(nn.Module):
-    """Wrapper for stage 1 model as a workaround for
-    the DataParallel usage in the training loop."""
-
-    def __init__(self, model: nn.Module) -> None:
+    """Wrapper for stage 1 model."""
+    def __init__(self, model):
         super().__init__()
         self.model = model
+        # Ensure model is in float32
+        self.model = self.model.float()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x):
+        # Ensure input is float32
+        x = x.float()
         z_mu, z_sigma = self.model.encode(x)
         z = self.model.sampling(z_mu, z_sigma)
         return z
@@ -149,7 +152,7 @@ class Stage1Wrapper(nn.Module):
 #
 #         # GENERATOR
 #         optimizer_g.zero_grad(set_to_none=True)
-#         with autocast(enabled=True):
+#         with autocast(device_type=str(device).split(':')[0], enabled=True):
 #             reconstruction, z_mu, z_sigma = model(x=images)
 #             l1_loss = F.l1_loss(reconstruction.float(), images.float())
 #             p_loss = perceptual_loss(reconstruction.float(), images.float())
@@ -189,7 +192,7 @@ class Stage1Wrapper(nn.Module):
 #         if adv_weight > 0:
 #             optimizer_d.zero_grad(set_to_none=True)
 #
-#             with autocast(enabled=True):
+#             with autocast(device_type=str(device).split(':')[0], enabled=True):
 #                 logits_fake = discriminator(reconstruction.contiguous().detach())[-1]
 #                 loss_d_fake = adv_loss(logits_fake, target_is_real=False, for_discriminator=True)
 #                 logits_real = discriminator(images.contiguous().detach())[-1]
@@ -249,7 +252,7 @@ class Stage1Wrapper(nn.Module):
 #     for x in loader:
 #         images = x["image"].to(device)
 #
-#         with autocast(enabled=True):
+#         with autocast(device_type=str(device).split(':')[0], enabled=True):
 #             # GENERATOR
 #             reconstruction, z_mu, z_sigma = model(x=images)
 #             l1_loss = F.l1_loss(reconstruction.float(), images.float())
@@ -418,8 +421,19 @@ def train_epoch_ldm(
         images = x['eeg'].to(device)
         timesteps = torch.randint(0, scheduler.num_train_timesteps, (images.shape[0],), device=device).long()
 
+        if images.dim() == 4 and images.shape[1] == 1:  # CAUEEG2 format [batch, 1, 19, 1000]
+            images = images.squeeze(1)  # Remove the singleton dimension -> [batch, 19, 1000]
+            # Apply padding slicing if needed
+            if images.shape[2] > 72:  # 72 = 36*2
+                images = images[:, :, 36:-36]
+
+        if images.dtype != torch.bfloat16:
+            images = images.to(torch.bfloat16)
+
         optimizer.zero_grad(set_to_none=True)
-        with autocast(enabled=True):
+        
+        use_autocast = torch.cuda.is_available()  # Only use autocast with CUDA
+        with autocast(device_type='cuda' if use_autocast else 'cpu', enabled=use_autocast):
             with torch.no_grad():
                 ##### Replace
                 e = stage1(images) * scale_factor
@@ -470,7 +484,18 @@ def eval_ldm(
         images = x["eeg"].to(device)	
         timesteps = torch.randint(0, scheduler.num_train_timesteps, (images.shape[0],), device=device).long()
 
-        with autocast(enabled=True):
+        # Handle CAUEEG2 data dimensions if needed
+        if images.dim() == 4 and images.shape[1] == 1:  # CAUEEG2 format [batch, 1, 19, 1000]
+            images = images.squeeze(1)  # Remove the singleton dimension -> [batch, 19, 1000]
+            # Apply padding slicing if needed
+            if images.shape[2] > 72:  # 72 = 36*2
+                images = images[:, :, 36:-36]
+        
+        if images.dtype != torch.bfloat16:
+            images = images.to(torch.bfloat16)
+
+        use_autocast = torch.cuda.is_available()  # Only use autocast with CUDA
+        with autocast(device_type='cuda' if use_autocast else 'cpu', enabled=use_autocast):
             e = stage1(images) * scale_factor
 
             noise = torch.randn_like(e).to(device)
@@ -496,17 +521,17 @@ def eval_ldm(
     for k, v in total_losses.items():
         writer.add_scalar(f"{k}", v, step)
 
-    if sample:
-        log_ldm_sample_unconditioned(
-            model=raw_model,
-            stage1=raw_stage1,
-            scheduler=scheduler,
-            spatial_shape=tuple(e.shape[1:]),
-            writer=writer,
-            step=step,
-            device=device,
-            scale_factor=scale_factor,
-            images=images
-        )
+    # if sample:
+    #     log_ldm_sample_unconditioned(
+    #         model=raw_model,
+    #         stage1=raw_stage1,
+    #         scheduler=scheduler,
+    #         spatial_shape=tuple(e.shape[1:]),
+    #         writer=writer,
+    #         step=step,
+    #         device=device,
+    #         scale_factor=scale_factor,
+    #         images=images
+    #     )
 
     return total_losses["loss"]

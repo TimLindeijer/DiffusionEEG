@@ -288,11 +288,10 @@ def log_ldm_sample_unconditioned(
     x_hat = stage1.model.decode(latent / scale_factor)
     x_hat_no_sacle = stage1.model.decode(latent)
 
-    log_spectral(images, x_hat, writer, step+1, name="SAMPLE_UNCONDITIONED",)
-
-    log_spectral(images, x_hat_no_sacle, writer, step+1, name="SAMPLE_NO_SCALE_UNCONDITIONED")
-
-    log_spectral(x_hat, x_hat_no_sacle, writer, step+1, name="SAMPLE_COMPARE_SCALE_UNCONDITIONED")
+    run_dir = "ldm_caueeg2_label_hc"
+    log_spectral(images, x_hat, writer, step+1, name="SAMPLE_UNCONDITIONED", run_dir=run_dir)
+    log_spectral(images, x_hat_no_sacle, writer, step+1, name="SAMPLE_NO_SCALE_UNCONDITIONED", run_dir=run_dir)
+    log_spectral(x_hat, x_hat_no_sacle, writer, step+1, name="SAMPLE_COMPARE_SCALE_UNCONDITIONED", run_dir=run_dir)
 
     img_0 = x_hat[0, 0, :].cpu().numpy()
     fig = plt.figure(dpi=300)
@@ -332,3 +331,7 @@ def extract(a, t, x_shape):
     b, *_ = t.shape
     out = a.gather(-1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
+
+def get_lr(optimizer):
+    for param_group in optimizer.param_groups:
+        return param_group["lr"]
