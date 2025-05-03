@@ -3,7 +3,7 @@
 #SBATCH --partition=gpu
 #SBATCH --time=48:00:00
 #SBATCH --job-name=aekl_hc
-#SBATCH --output=outputs/aekl_caueeg_hc.out
+#SBATCH --output=outputs/aekl_caueeg_hc_4channels.out
 #SBATCH --signal=B:USR1@300
 #SBATCH --requeue
 
@@ -38,14 +38,8 @@ python src/train_autoencoderkl.py \
     --path_pre_processed /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
     --label_filter hc \
     --spe spectral \
-    --spectral_cap 1 \
-    --clip_grad 0.1 \
-    --loss_scale 0.01 \
-    --weight_decay 1e-4 \
-    --batch_size 8 \
-    --warmup_epochs 20 \
-    --clamp_z_mu 3.0 \
-    --clamp_z_sigma 5.0
+    --clip_grad 0.5 \
+    --spectral_cap 10  
 
 # Record completion
 echo "Job completed/interrupted at $(date)"

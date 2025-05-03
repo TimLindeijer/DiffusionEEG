@@ -3,7 +3,7 @@
 #SBATCH --partition=gpu
 #SBATCH --time=48:00:00
 #SBATCH --job-name=aekl_dementia
-#SBATCH --output=outputs/aekl_caueeg_dementia.out
+#SBATCH --output=outputs/aekl_caueeg_dementia_4channels.out
 #SBATCH --signal=B:USR1@300
 #SBATCH --requeue
 

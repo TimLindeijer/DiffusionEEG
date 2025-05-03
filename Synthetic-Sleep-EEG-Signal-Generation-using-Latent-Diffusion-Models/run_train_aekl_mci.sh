@@ -3,7 +3,7 @@
 #SBATCH --partition=gpu
 #SBATCH --time=48:00:00
 #SBATCH --job-name=aekl_mci
-#SBATCH --output=outputs/aekl_caueeg_mci.out
+#SBATCH --output=outputs/aekl_caueeg_mci_4channels.out
 #SBATCH --signal=B:USR1@300
 #SBATCH --requeue
 

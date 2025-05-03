@@ -8,7 +8,7 @@ train:
     output_dir: '/project/outputs'
     base_path: '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2'
     data_root: '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2'
-    run_dir: 'ldm_caueeg2'  # Changed for clarity
+    run_dir: 'ldm_caueeg2_4ch_116size'  # Changed for clarity
     drop_last: false
     base_lr: 0.0001
     save_every: 50
@@ -30,13 +30,13 @@ model:
     logvar_init: 0.0
     unet_config:
       params:
-        image_size: 928  # Updated to match CAUEEG2 time dimension (1000 - 36*2)
-        in_channels: 4   # Match with latent_channels from autoencoder
-        out_channels: 4  # Match with latent_channels from autoencoder
-        model_channels: 64  # Reduced from 128 to save memory
-        attention_resolutions: [8,4]
+        image_size: 116  # Latent space temporal dimension
+        in_channels: 4   # Matches latent_channels from autoencoder
+        out_channels: 4  # Matches latent_channels from autoencoder
+        model_channels: 64
+        attention_resolutions: [4]  # Only at deepest level
         num_res_blocks: 2
-        channel_mult: [1,2,4]
+        channel_mult: [1,2,4]  # Keep matching AEKL depth pattern
         dropout: 0.0
         conv_resample: True
         num_heads: 1
