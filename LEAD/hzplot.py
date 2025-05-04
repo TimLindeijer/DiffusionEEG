@@ -1,14 +1,27 @@
 import numpy as np
 import mne
 import matplotlib.pyplot as plt
+import os
 
-path = '/home/stud/timlin/bhome/DiffusionEEG/results/LEAD/diffusion/LEAD/Simplified-Diffusion-LR-0001-SS-1000-DS2-hc/generated_samples_16.npy'
-# path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2/Feature/feature_01.npy'
+# File path
+path = '/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/synthetic_hc_data/Feature/feature_00.npy'
 
+# Output directory
+output_dir = 'images'
+os.makedirs(output_dir, exist_ok=True)
+
+# Load data
 data = np.load(path)
-sfreq = 200  # Sampling freq
+sfreq = 200  # Sampling frequency
 
-n_epochs, n_times, n_channels = data.shape
+print(f"Original data shape: {data.shape}")
+
+# MNE expects data in shape (n_epochs, n_channels, n_times)
+# Your data is (n_epochs, n_channels, n_timepoints)
+n_epochs, n_channels, n_times = data.shape
+
+# Confirm data dimensions
+print(f"Epochs: {n_epochs}, Channels: {n_channels}, Timepoints: {n_times}")
 
 # Generate dummy channel names just for plotting
 channel_names = [f"EEG {i+1}" for i in range(n_channels)]
@@ -16,17 +29,28 @@ channel_types = ["eeg"] * n_channels
 
 # Create MNE info structure
 info = mne.create_info(ch_names=channel_names, sfreq=sfreq, ch_types=channel_types)
-# Transpose data to match MNE's expected shape: (n_epochs, n_channels, n_times)
-data_mne = data.transpose(0, 2, 1)  # (546, 19, 128)
-# Create MNE Epochs object
-print(data_mne.shape)
-epochs = mne.EpochsArray(data_mne, info)
 
-# Compute and plot PSD
+# Create MNE Epochs object - data is already in the right shape (n_epochs, n_channels, n_times)
+epochs = mne.EpochsArray(data, info)
+
+# Plot PSD for all channels
+print("Computing and plotting PSD...")
 psd_fig = epochs.compute_psd(method="welch", fmin=1, fmax=30).plot(average=True)
+psd_fig.savefig(os.path.join(output_dir, 'synthetic_eeg_psd_all_channels.png'))
+print(f"Saved PSD plot to {os.path.join(output_dir, 'synthetic_eeg_psd_all_channels.png')}")
 
-# Make sure the plot is displayed (if running in a notebook or interactive environment)
-# plt.show()
+# Plot PSDs for individual channels
+print("Plotting individual channel PSDs...")
+for ch_idx in range(min(n_channels, 6)):  # Plot first 6 channels (or fewer if there are less)
+    ch_name = channel_names[ch_idx]
+    ch_fig = epochs.compute_psd(method="welch", fmin=1, fmax=30, picks=[ch_idx]).plot(average=True)
+    ch_fig.savefig(os.path.join(output_dir, f'synthetic_eeg_psd_channel_{ch_idx+1}.png'))
+    print(f"Saved PSD plot for channel {ch_name} to {os.path.join(output_dir, f'synthetic_eeg_psd_channel_{ch_idx+1}.png')}")
 
-# Alternative: save the plot to a file
-psd_fig.savefig('eeg_psd_plot_DS2.png')
+# Plot a sample of the raw data
+print("Plotting raw data sample...")
+raw_fig = epochs[0].plot(scalings='auto')
+plt.savefig(os.path.join(output_dir, 'synthetic_eeg_raw_sample.png'))
+print(f"Saved raw data plot to {os.path.join(output_dir, 'synthetic_eeg_raw_sample.png')}")
+
+print("All plots generated successfully!")
