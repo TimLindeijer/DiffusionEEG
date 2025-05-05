@@ -1,0 +1,25 @@
+name: ldm-eeg
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pip=23.3
+  - pip:
+    - matplotlib
+    - omegaconf==2.1.1
+    - pandas
+    - scikit-learn
+    - scipy
+    - tensorboardX
+    - tqdm
+    - scikit-image
+    - mlflow==2.4.0
+    - tensorboard
+    - monai
+    - monai-generative
+    - lpips
+    - git+https://github.com/braindecode/braindecode.git#egg=braindecode
+    - torch
+    - torchvision
+    - torchaudio
