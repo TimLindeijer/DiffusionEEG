@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import os
 
 # File path
-path = '/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/synthetic_hc_data/Feature/feature_00.npy'
+path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2/Feature/feature_01.npy'
 
 # Output directory
 output_dir = 'images'
@@ -18,6 +18,9 @@ print(f"Original data shape: {data.shape}")
 
 # MNE expects data in shape (n_epochs, n_channels, n_times)
 # Your data is (n_epochs, n_channels, n_timepoints)
+if data.shape[2] == 19:
+    data = data.transpose(0, 2, 1) 
+    print(f"Transposed data shape: {data.shape}")
 n_epochs, n_channels, n_times = data.shape
 
 # Confirm data dimensions
@@ -36,21 +39,21 @@ epochs = mne.EpochsArray(data, info)
 # Plot PSD for all channels
 print("Computing and plotting PSD...")
 psd_fig = epochs.compute_psd(method="welch", fmin=1, fmax=30).plot(average=True)
-psd_fig.savefig(os.path.join(output_dir, 'synthetic_eeg_psd_all_channels.png'))
-print(f"Saved PSD plot to {os.path.join(output_dir, 'synthetic_eeg_psd_all_channels.png')}")
+psd_fig.savefig(os.path.join(output_dir, 'caueeg2_eeg_psd_all_channels_feature01.png'))
+print(f"Saved PSD plot to {os.path.join(output_dir, 'caueeg2_eeg_psd_all_channels.png')}")
 
-# Plot PSDs for individual channels
-print("Plotting individual channel PSDs...")
-for ch_idx in range(min(n_channels, 6)):  # Plot first 6 channels (or fewer if there are less)
-    ch_name = channel_names[ch_idx]
-    ch_fig = epochs.compute_psd(method="welch", fmin=1, fmax=30, picks=[ch_idx]).plot(average=True)
-    ch_fig.savefig(os.path.join(output_dir, f'synthetic_eeg_psd_channel_{ch_idx+1}.png'))
-    print(f"Saved PSD plot for channel {ch_name} to {os.path.join(output_dir, f'synthetic_eeg_psd_channel_{ch_idx+1}.png')}")
+# # Plot PSDs for individual channels
+# print("Plotting individual channel PSDs...")
+# for ch_idx in range(min(n_channels, 6)):  # Plot first 6 channels (or fewer if there are less)
+#     ch_name = channel_names[ch_idx]
+#     ch_fig = epochs.compute_psd(method="welch", fmin=1, fmax=30, picks=[ch_idx]).plot(average=True)
+#     ch_fig.savefig(os.path.join(output_dir, f'synthetic_eeg_psd_channel_{ch_idx+1}.png'))
+#     print(f"Saved PSD plot for channel {ch_name} to {os.path.join(output_dir, f'synthetic_eeg_psd_channel_{ch_idx+1}.png')}")
 
 # Plot a sample of the raw data
 print("Plotting raw data sample...")
 raw_fig = epochs[0].plot(scalings='auto')
-plt.savefig(os.path.join(output_dir, 'synthetic_eeg_raw_sample.png'))
-print(f"Saved raw data plot to {os.path.join(output_dir, 'synthetic_eeg_raw_sample.png')}")
+plt.savefig(os.path.join(output_dir, 'caueeg2_eeg_raw_sample.png'))
+print(f"Saved raw data plot to {os.path.join(output_dir, 'caueeg2_eeg_raw_sample.png')}")
 
 print("All plots generated successfully!")
