@@ -12,7 +12,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix, classification_report
+from sklearn.metrics import confusion_matrix, classification_report, balanced_accuracy_score
 import seaborn as sns
 
 import mne
@@ -233,7 +233,11 @@ def load_caueeg_data(feature_path, label_path, ch_names=None, label_prefix=""):
         
         # Feature data is (epochs, times, channels)
         # MNE expects (epochs, channels, times)
-        data = np.transpose(feature_data, (0, 2, 1))
+        if feature_data.shape[2] == 19:
+            data = feature_data.transpose(0, 2, 1) 
+            print(f"Transposed data shape: {data.shape}")
+        else:
+            data = feature_data
         
         # Create info object - make sure to only use available channels
         n_channels = data.shape[1]
@@ -303,6 +307,8 @@ def evaluate_prediction_results(all_preds, output_dir, use_wandb=False):
     y_true = all_preds['y_true'].values
     y_pred = all_preds['y_pred'].values
     
+    # Calculate balanced accuracy
+    balanced_acc = balanced_accuracy_score(y_true, y_pred)
     # Generate classification report
     report = classification_report(y_true, y_pred, output_dict=True)
     
@@ -323,6 +329,8 @@ def evaluate_prediction_results(all_preds, output_dir, use_wandb=False):
             # This is a metric like 'accuracy', keep as is
             named_report[key] = value
     
+    # Add balanced accuracy to the report
+    named_report['balanced_accuracy'] = balanced_acc
     # Convert to DataFrame and save
     report_df = pd.DataFrame(named_report).transpose()
     report_csv_path = os.path.join(output_dir, 'classification_report.csv')
