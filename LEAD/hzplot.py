@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 import os
 
 # File path
-path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2/Feature/feature_01.npy'
+# path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_CAUEEG2/Feature/feature_01.npy'
+path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/SYNTH-CAUEEG2/Feature/feature_01.npy'
 
 # Output directory
 output_dir = 'images'
@@ -39,8 +40,8 @@ epochs = mne.EpochsArray(data, info)
 # Plot PSD for all channels
 print("Computing and plotting PSD...")
 psd_fig = epochs.compute_psd(method="welch", fmin=1, fmax=30).plot(average=True)
-psd_fig.savefig(os.path.join(output_dir, 'caueeg2_eeg_psd_all_channels_feature01.png'))
-print(f"Saved PSD plot to {os.path.join(output_dir, 'caueeg2_eeg_psd_all_channels.png')}")
+psd_fig.savefig(os.path.join(output_dir, 'lead_eeg_psd_all_channels_feature01.png'))
+print(f"Saved PSD plot to {os.path.join(output_dir, 'lead_eeg_psd_all_channels_ft01.png')}")
 
 # # Plot PSDs for individual channels
 # print("Plotting individual channel PSDs...")
@@ -53,7 +54,7 @@ print(f"Saved PSD plot to {os.path.join(output_dir, 'caueeg2_eeg_psd_all_channel
 # Plot a sample of the raw data
 print("Plotting raw data sample...")
 raw_fig = epochs[0].plot(scalings='auto')
-plt.savefig(os.path.join(output_dir, 'caueeg2_eeg_raw_sample.png'))
-print(f"Saved raw data plot to {os.path.join(output_dir, 'caueeg2_eeg_raw_sample.png')}")
+plt.savefig(os.path.join(output_dir, 'lead_eeg_raw_sample_feat01.png'))
+print(f"Saved raw data plot to {os.path.join(output_dir, 'lead_eeg_raw_sample_feat01.png')}")
 
 print("All plots generated successfully!")
