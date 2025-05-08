@@ -2,7 +2,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=24:00:00
-#SBATCH --job-name=GREEN-EEG-Classification-SYNTH-LEAD-CAUEEG2
+#SBATCH --job-name=green_lead
 #SBATCH --output=outputs/GREEN_EEG_Classification_SYNTH_LEAD_CAUEEG2_300_EPOCHS%j.out
 
 # Create output directories

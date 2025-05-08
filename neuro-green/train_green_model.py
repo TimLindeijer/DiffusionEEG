@@ -12,7 +12,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix, classification_report, balanced_accuracy_score
+from sklearn.metrics import confusion_matrix, classification_report, balanced_accuracy_score, label_binarize, precision_score, recall_score
 import seaborn as sns
 
 import mne
@@ -331,6 +331,57 @@ def evaluate_prediction_results(all_preds, output_dir, use_wandb=False):
     
     # Add balanced accuracy to the report
     named_report['balanced_accuracy'] = balanced_acc
+    
+    # Calculate balanced average metrics
+    classes = sorted(set(y_true))
+    class_indices = {cls: i for i, cls in enumerate(classes)}
+    y_true_bin = label_binarize(y_true, classes=classes)
+    y_pred_bin = label_binarize(y_pred, classes=classes)
+    
+    # Initialize balanced metrics
+    balanced_precision = 0
+    balanced_recall = 0
+    balanced_f1 = 0
+    n_classes = len(classes)
+    
+    # Get class weights
+    class_counts = np.bincount(y_true.astype(int))
+    weights = 1 / (class_counts / np.sum(class_counts) * n_classes)
+    
+    # Calculate per-class metrics with balancing
+    for i, cls in enumerate(classes):
+        cls_idx = class_indices[cls]
+        true_cls = y_true_bin[:, cls_idx]
+        pred_cls = y_pred_bin[:, cls_idx]
+        
+        if np.sum(true_cls) > 0:  # Avoid division by zero
+            precision = precision_score(true_cls, pred_cls, zero_division=0)
+            recall = recall_score(true_cls, pred_cls, zero_division=0)
+            if precision + recall > 0:  # Avoid division by zero
+                f1 = 2 * (precision * recall) / (precision + recall)
+            else:
+                f1 = 0
+                
+            # Update balanced metrics with class weight
+            class_weight = weights[cls] if cls < len(weights) else 1.0
+            balanced_precision += precision * class_weight
+            balanced_recall += recall * class_weight
+            balanced_f1 += f1 * class_weight
+    
+    # Normalize by sum of weights
+    total_weight = np.sum([weights[cls] if cls < len(weights) else 1.0 for cls in classes])
+    balanced_precision /= total_weight
+    balanced_recall /= total_weight
+    balanced_f1 /= total_weight
+    
+    # Add balanced average to report
+    named_report['balanced avg'] = {
+        'precision': balanced_precision,
+        'recall': balanced_recall,
+        'f1-score': balanced_f1,
+        'support': np.sum(y_true_bin)
+    }
+    
     # Convert to DataFrame and save
     report_df = pd.DataFrame(named_report).transpose()
     report_csv_path = os.path.join(output_dir, 'classification_report.csv')
@@ -354,7 +405,9 @@ def evaluate_prediction_results(all_preds, output_dir, use_wandb=False):
         wandb.log({
             "test_accuracy": report['accuracy'],
             "test_weighted_f1": report['weighted avg']['f1-score'],
-            "test_macro_f1": report['macro avg']['f1-score']
+            "test_macro_f1": report['macro avg']['f1-score'],
+            "test_balanced_f1": named_report['balanced avg']['f1-score'],
+            "test_balanced_accuracy": balanced_acc
         })
         
         # Log per-class metrics

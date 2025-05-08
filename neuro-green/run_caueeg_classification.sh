@@ -2,7 +2,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=24:00:00
-#SBATCH --job-name=GREEN-EEG-Classification-CAUEEG2
+#SBATCH --job-name=green_caueeg2
 #SBATCH --output=outputs/GREEN_EEG_Classification_CAUEEG2_300_epochs_%j.out
 
 # Create output directories
@@ -47,8 +47,6 @@ python neuro-green/train_green_model.py \
     --num_workers 4 \
     --detailed_evaluation \
     --sfreq 200 \
-    --test_fraction 0.2 \
-    --n_folds 1 \
     --seed 42 \
     --use_wandb \
     --wandb_project "green-diff" \
