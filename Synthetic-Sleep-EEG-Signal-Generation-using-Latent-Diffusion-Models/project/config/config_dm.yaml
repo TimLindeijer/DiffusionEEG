@@ -1,16 +1,16 @@
 train:
-    seed: 2
-    batch_size: 512
-    n_epochs: 2000
-    eval_freq: 50
-    num_workers: 25
-    experiment: 'DDPM'
-    output_dir: '/project/outputs_dm'
-    data_root: '/data/sleep-edfx/'
-    run_dir: 'dm_eeg'
-    drop_last: false
-    base_lr: 0.0001
-    save_every: 50
+  seed: 2
+  batch_size: 1  # Reduced batch size to handle larger data dimensions
+  n_epochs: 2000
+  eval_freq: 50
+  num_workers: 10
+  experiment: 'DDPM_CAUEEG2'
+  output_dir: '/project/outputs'
+  data_root: '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2'
+  run_dir: 'batched_dm_eeg_caueeg2'
+  drop_last: false
+  base_lr: 0.0001
+  save_every: 50
 
 model:
   params:
@@ -29,9 +29,9 @@ model:
     logvar_init: 0.0
     unet_config:
       params:
-        image_size: 768
-        in_channels: 3
-        out_channels: 1
+        image_size: 1000  # Match the timepoints dimension
+        in_channels: 19   # Number of EEG channels
+        out_channels: 19  # Output should match input channels
         model_channels: 128
         attention_resolutions: [8,4]
         num_res_blocks: 2
