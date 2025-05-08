@@ -1,7 +1,7 @@
 train:
   seed: 2
   batch_size: 1  # Reduced batch size to handle larger data dimensions
-  n_epochs: 2000
+  n_epochs: 200
   eval_freq: 50
   num_workers: 10
   experiment: 'DDPM_CAUEEG2'

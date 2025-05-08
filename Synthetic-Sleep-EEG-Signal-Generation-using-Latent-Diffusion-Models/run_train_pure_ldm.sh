@@ -38,7 +38,7 @@ python src/train_pure_ldm.py \
     --dataset caueeg2 \
     --path_pre_processed /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
     --label_filter hc \
-    --batch_size 8 \
+    --batch_size 4 \
     --config_file /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_dm.yaml \
     --spe spectral
 

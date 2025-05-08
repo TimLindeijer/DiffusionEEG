@@ -12,7 +12,14 @@ import datetime
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix, classification_report, balanced_accuracy_score, label_binarize, precision_score, recall_score
+from sklearn.metrics import (
+    confusion_matrix, 
+    classification_report, 
+    balanced_accuracy_score,
+    precision_score, 
+    recall_score
+)
+from sklearn.preprocessing import label_binarize
 import seaborn as sns
 
 import mne
