@@ -51,7 +51,7 @@ python neuro-green/train_green_model.py \
     --sfreq 200 \
     --seed 42 \
     --use_wandb \
-    --wandb_project "green-caueeg" \
+    --wandb_project "green-diff" \
     --wandb_name "$RUN_NAME" \
     --wandb_tags "synthetic_lead_caueeg2" "production" "300_epochs" 
 

@@ -2,8 +2,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=24:00:00
-#SBATCH --job-name=GREEN-EEG-Transfer-SYNTH-to-CAUEEG2
-#SBATCH --output=outputs/GREEN_EEG_Transfer_SYNTH_to_CAUEEG2_%j.out
+#SBATCH --job-name=GREEN-Transfer-SYNTH2CAUEEG2
+#SBATCH --output=outputs/GREEN_SYNTH2CAUEEG2_Transfer_%j.out
 
 # Create output directories
 mkdir -p outputs
@@ -17,14 +17,14 @@ conda activate green-env
 # pip install geotorch
 # pip install lightning
 
-# Set paths - REVERSED from previous script
+# Set paths - Using SYNTH-CAUEEG2 for training and CAUEEG2 for testing
 DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/SYNTH-CAUEEG2"
 TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2"
 OUTPUT_DIR="results/transfer_synth_to_caueeg2"
-RUN_NAME="SYNTH_to_CAUEEG2_$(date +%Y%m%d_%H%M%S)"
+RUN_NAME="LEAD_to_CAUEEG2_$(date +%Y%m%d_%H%M%S)"
 
-# W&B Authentication - using API key
-export WANDB_API_KEY="16232e63f53b8b502555cea8afc019f0dfc5b5ee"
+# W&B Authentication - using API key from file
+export WANDB_API_KEY=$(cat ~/.wandb_key)
 
 # Print information about the run
 echo "Starting GREEN transfer learning from SYNTH-CAUEEG2 to CAUEEG2"
@@ -53,9 +53,9 @@ python neuro-green/train_green_model.py \
     --sfreq 200 \
     --seed 42 \
     --use_wandb \
-    --wandb_project "green-caueeg" \
+    --wandb_project "green-diff" \
     --wandb_name "$RUN_NAME" \
-    --wandb_tags "synthetic" "caueeg2" "transfer_learning" "reverse_transfer"
+    --wandb_tags "synthetic" "caueeg2" "transfer_learning" "reverse_transfer" "lead"
 
 # Save information about the completed job
 echo "Job completed at $(date)"
