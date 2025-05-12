@@ -28,6 +28,7 @@ python src/generate_matching_eeg.py \
   --autoencoder_config /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_encoder_eeg.yaml \
   --diffusion_config /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_ldm.yaml \
   --original_label_path /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2/Label/label.npy \
-  --output_dir project/data/synthetic_caueeg2_data \
+  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_1000TP \
+  --num_timepoints 1000 \
   --diffusion_steps 1000 \
   --batch_epochs 64

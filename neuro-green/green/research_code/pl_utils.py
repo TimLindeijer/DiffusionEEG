@@ -40,7 +40,8 @@ def get_train_test_loaders(dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         pin_memory=pin_memory,
-        num_workers=num_workers
+        num_workers=num_workers,
+        drop_last=True 
     )
     test_loader = DataLoader(
         test_set,
