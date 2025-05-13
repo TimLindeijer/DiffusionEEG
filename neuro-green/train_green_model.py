@@ -145,7 +145,7 @@ def parse_args():
                         help='Hidden dimensions (multiple values for multiple layers)')
     parser.add_argument('--dropout', type=float, default=0.5,
                         help='Dropout rate')
-    parser.add_argument('--sfreq', type=float, default=100.0,
+    parser.add_argument('--sfreq', type=float, default=200.0,
                         help='Sampling frequency of the data')
     
     # Other parameters
@@ -180,7 +180,7 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-def load_caueeg_data(feature_path, label_path, ch_names=None, label_prefix=""):
+def load_caueeg_data(feature_path, label_path, ch_names=None, label_prefix="", normalize=False):
     """
     Load CAUEEG2 dataset and convert to mne.Epochs
     
@@ -194,6 +194,8 @@ def load_caueeg_data(feature_path, label_path, ch_names=None, label_prefix=""):
         List of channel names
     label_prefix : str, optional
         Prefix to add to printed labels (e.g., "Training" or "Testing")
+    normalize : bool, optional
+        Whether to apply min-max normalization to the data
         
     Returns
     -------
@@ -215,14 +217,16 @@ def load_caueeg_data(feature_path, label_path, ch_names=None, label_prefix=""):
     # Get mapping between subject_id and label
     subject_labels = {int(entry[1]): int(entry[0]) for entry in labels_array}
     
-    # Get feature files
+    # Get feature files - FIRST define this before using it
     feature_files = [f for f in os.listdir(feature_path) if f.startswith('feature_') and f.endswith('.npy')]
     feature_files.sort()
     
+    # Initialize lists for epochs, labels, and subjects
     epochs_list = []
     labels_list = []
     subjects_list = []
     
+    # Set prefix for printing
     prefix = f"{label_prefix} " if label_prefix else ""
     print(f"Found {len(feature_files)} {prefix.lower()}feature files")
     
@@ -238,6 +242,19 @@ def load_caueeg_data(feature_path, label_path, ch_names=None, label_prefix=""):
         # Load feature data
         feature_data = np.load(os.path.join(feature_path, feature_file))
         
+        # Apply min-max normalization if requested
+        if normalize:
+            # Normalize each channel separately
+            # Assuming feature_data shape is (epochs, times, channels)
+            for epoch_idx in range(feature_data.shape[0]):
+                for channel_idx in range(feature_data.shape[2]):
+                    channel_data = feature_data[epoch_idx, :, channel_idx]
+                    min_val = np.min(channel_data)
+                    max_val = np.max(channel_data)
+                    if max_val > min_val:  # Avoid division by zero
+                        feature_data[epoch_idx, :, channel_idx] = (channel_data - min_val) / (max_val - min_val)
+            print(f"Applied min-max normalization to {feature_file}")
+        
         # Feature data is (epochs, times, channels)
         # MNE expects (epochs, channels, times)
         if feature_data.shape[2] == 19:
@@ -250,7 +267,7 @@ def load_caueeg_data(feature_path, label_path, ch_names=None, label_prefix=""):
         n_channels = data.shape[1]
         used_ch_names = ch_names[:n_channels] if n_channels <= len(ch_names) else [f"ch{i}" for i in range(n_channels)]
         
-        info = mne.create_info(ch_names=used_ch_names, sfreq=100.0, ch_types='eeg')
+        info = mne.create_info(ch_names=used_ch_names, sfreq=200.0, ch_types='eeg')
         
         # Create epochs object
         epochs = mne.EpochsArray(data, info)
@@ -484,7 +501,7 @@ def main():
     
     # Load training data
     train_epochs_list, train_labels_list, train_subjects_list = load_caueeg_data(
-        train_feature_path, train_label_path, label_prefix="Training")
+        train_feature_path, train_label_path, label_prefix="Training", normalize=False)
     
     # Handle test dataset
     if args.use_separate_test:
@@ -504,7 +521,7 @@ def main():
         
         # Load testing data
         test_epochs_list, test_labels_list, test_subjects_list = load_caueeg_data(
-            test_feature_path, test_label_path, label_prefix="Testing")
+            test_feature_path, test_label_path, label_prefix="Testing", normalize=False)
             
         # Use all training data for training
         train_indices = [list(range(len(train_epochs_list)))]

@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """
-Augment genuine EEG dataset with synthetic data by a specified percentage.
-This script combines real data with synthetic data to create augmented datasets
-of different sizes (e.g., +20%, +40%, etc.)
+Create train/test splits from genuine data and augment the training set with synthetic data.
+This script:
+1. Splits genuine data into train/test sets (keeping test set 100% genuine)
+2. Augments only the training set with synthetic data by specified percentages
 """
 
 import os
@@ -12,9 +13,10 @@ import shutil
 from collections import defaultdict
 from pathlib import Path
 import random
+from sklearn.model_selection import train_test_split
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Augment genuine EEG dataset with synthetic data")
+    parser = argparse.ArgumentParser(description="Create train/test splits and augment training data")
     
     # Path to datasets
     parser.add_argument("--genuine_dataset", type=str, required=True,
@@ -24,7 +26,13 @@ def parse_args():
     
     # Output directory
     parser.add_argument("--output_dir", type=str, required=True,
-                      help="Directory to save the augmented datasets")
+                      help="Directory to save the split and augmented datasets")
+    
+    # Split parameters
+    parser.add_argument("--test_size", type=float, default=0.2,
+                      help="Proportion of genuine data to use for testing (default: 0.2)")
+    parser.add_argument("--stratify", action="store_true", default=True,
+                      help="Whether to stratify the split by class labels")
     
     # Augmentation percentages
     parser.add_argument("--percentages", type=str, default="20,40,60,100",
@@ -64,41 +72,158 @@ def read_labels(label_path):
     
     return label_to_features, labels
 
-def create_augmented_dataset(genuine_path, synthetic_path, output_path, percentage, seed=42):
+def copy_features(feature_ids, src_dir, dst_dir, prefix="feature_"):
+    """Copy feature files with the given IDs from source to destination."""
+    os.makedirs(dst_dir, exist_ok=True)
+    
+    copied_count = 0
+    for feature_id in feature_ids:
+        src_file = os.path.join(src_dir, f"{prefix}{feature_id:02d}.npy")
+        dst_file = os.path.join(dst_dir, f"{prefix}{feature_id:02d}.npy")
+        
+        if os.path.exists(src_file):
+            shutil.copy2(src_file, dst_file)
+            copied_count += 1
+        else:
+            print(f"Warning: Source file not found: {src_file}")
+    
+    return copied_count
+
+def create_train_test_split(genuine_path, output_dir, test_size=0.2, stratify=True, seed=42):
     """
-    Create an augmented dataset by combining genuine data with synthetic data.
+    Split genuine dataset into train and test sets.
     
     Args:
         genuine_path: Path to genuine dataset
+        output_dir: Base path to save split datasets
+        test_size: Proportion of data to use for testing
+        stratify: Whether to stratify the split by class labels
+        seed: Random seed for reproducibility
+    
+    Returns:
+        Dictionary mapping labels to feature IDs for the training set
+        List of all feature IDs in the training set
+    """
+    print(f"\n{'='*80}")
+    print(f"Creating train/test split (test_size={test_size}, stratify={stratify})")
+    print(f"{'='*80}")
+    
+    # Set random seed
+    random.seed(seed)
+    np.random.seed(seed)
+    
+    # Create output directories
+    train_dir = os.path.join(output_dir, "train_genuine")
+    test_dir = os.path.join(output_dir, "test_genuine")
+    
+    train_feature_dir = os.path.join(train_dir, "Feature")
+    train_label_dir = os.path.join(train_dir, "Label")
+    test_feature_dir = os.path.join(test_dir, "Feature")
+    test_label_dir = os.path.join(test_dir, "Label")
+    
+    os.makedirs(train_feature_dir, exist_ok=True)
+    os.makedirs(train_label_dir, exist_ok=True)
+    os.makedirs(test_feature_dir, exist_ok=True)
+    os.makedirs(test_label_dir, exist_ok=True)
+    
+    # Read genuine labels
+    genuine_label_path = os.path.join(genuine_path, "Label", "label.npy")
+    genuine_label_dict, genuine_labels = read_labels(genuine_label_path)
+    
+    # Create arrays for sklearn's train_test_split
+    features = []
+    labels = []
+    
+    for idx, entry in enumerate(genuine_labels):
+        label = int(entry[0])
+        feature_id = int(entry[1])
+        features.append(feature_id)
+        labels.append(label)
+    
+    # Perform train/test split
+    if stratify:
+        features_train, features_test, labels_train, labels_test = train_test_split(
+            features, labels, test_size=test_size, random_state=seed, stratify=labels
+        )
+    else:
+        features_train, features_test, labels_train, labels_test = train_test_split(
+            features, labels, test_size=test_size, random_state=seed
+        )
+    
+    print(f"Split genuine dataset: {len(features_train)} train samples, {len(features_test)} test samples")
+    
+    # Create label arrays
+    train_labels = []
+    test_labels = []
+    
+    for i, feature_id in enumerate(features_train):
+        train_labels.append([labels_train[i], feature_id])
+    
+    for i, feature_id in enumerate(features_test):
+        test_labels.append([labels_test[i], feature_id])
+    
+    # Save label files
+    np.save(os.path.join(train_label_dir, "label.npy"), np.array(train_labels))
+    np.save(os.path.join(test_label_dir, "label.npy"), np.array(test_labels))
+    
+    # Copy feature files
+    genuine_feature_dir = os.path.join(genuine_path, "Feature")
+    train_copied = copy_features(features_train, genuine_feature_dir, train_feature_dir)
+    test_copied = copy_features(features_test, genuine_feature_dir, test_feature_dir)
+    
+    print(f"Copied {train_copied} feature files to train set and {test_copied} feature files to test set")
+    
+    # Create train set label dictionary for augmentation
+    train_label_dict = defaultdict(list)
+    for i, feature_id in enumerate(features_train):
+        label = labels_train[i]
+        train_label_dict[label].append(feature_id)
+    
+    # Print class distribution
+    train_dist = {label: len(ids) for label, ids in train_label_dict.items()}
+    test_dist = defaultdict(int)
+    for label in labels_test:
+        test_dist[label] += 1
+    
+    print(f"Train set class distribution: {train_dist}")
+    print(f"Test set class distribution: {dict(test_dist)}")
+    
+    return train_label_dict, features_train
+
+def augment_training_set(genuine_train_dict, genuine_train_ids, synthetic_path, output_dir, 
+                        percentage, seed=42):
+    """
+    Augment the training set with synthetic data.
+    
+    Args:
+        genuine_train_dict: Dictionary mapping labels to feature IDs for the genuine training set
+        genuine_train_ids: List of all feature IDs in the genuine training set
         synthetic_path: Path to synthetic dataset
-        output_path: Path to save augmented dataset
-        percentage: Percentage of synthetic data to add (e.g., 20 for 20%)
+        output_dir: Path to save the augmented training set
+        percentage: Percentage of synthetic data to add
         seed: Random seed for reproducibility
     """
     print(f"\n{'='*80}")
-    print(f"Creating augmented dataset with +{percentage}% synthetic data")
+    print(f"Augmenting training set with +{percentage}% synthetic data")
     print(f"{'='*80}")
     
-    # Set random seed for reproducibility
+    # Set random seed
     random.seed(seed)
     
     # Create output directories
-    output_feature_dir = os.path.join(output_path, "Feature")
-    output_label_dir = os.path.join(output_path, "Label")
+    output_feature_dir = os.path.join(output_dir, "Feature")
+    output_label_dir = os.path.join(output_dir, "Label")
     os.makedirs(output_feature_dir, exist_ok=True)
     os.makedirs(output_label_dir, exist_ok=True)
     
-    # Read genuine and synthetic labels
-    genuine_label_path = os.path.join(genuine_path, "Label", "label.npy")
+    # Read synthetic labels
     synthetic_label_path = os.path.join(synthetic_path, "Label", "label.npy")
-    
-    genuine_label_dict, genuine_labels = read_labels(genuine_label_path)
     synthetic_label_dict, synthetic_labels = read_labels(synthetic_label_path)
     
     # Calculate number of samples to add for each category
     samples_to_add = {}
     for label in [0, 1, 2]:  # HC, MCI, Dementia
-        genuine_count = len(genuine_label_dict[label])
+        genuine_count = len(genuine_train_dict[label])
         add_count = int(genuine_count * percentage / 100)
         available_count = len(synthetic_label_dict[label])
         
@@ -109,27 +234,25 @@ def create_augmented_dataset(genuine_path, synthetic_path, output_path, percenta
         samples_to_add[label] = add_count
         print(f"Category {label}: Adding {add_count} synthetic samples to {genuine_count} genuine samples")
     
-    # First, copy all genuine files to the output directory
-    print("Copying genuine dataset files...")
+    # First, copy all genuine training files to the output directory
+    print("Copying genuine training files...")
+    genuine_train_dir = os.path.join(output_dir, "..", "train_genuine", "Feature")
     
-    # Copy all genuine features
-    genuine_feature_path = os.path.join(genuine_path, "Feature")
-    for feature_file in os.listdir(genuine_feature_path):
-        if feature_file.endswith(".npy"):
-            src_path = os.path.join(genuine_feature_path, feature_file)
-            dst_path = os.path.join(output_feature_dir, feature_file)
-            shutil.copy2(src_path, dst_path)
+    for feature_id in genuine_train_ids:
+        src_file = os.path.join(genuine_train_dir, f"feature_{feature_id:02d}.npy")
+        dst_file = os.path.join(output_feature_dir, f"feature_{feature_id:02d}.npy")
+        if os.path.exists(src_file):
+            shutil.copy2(src_file, dst_file)
     
-    # Find the highest feature_id in the genuine dataset
-    max_feature_id = 0
-    for label in genuine_label_dict.values():
-        if label:
-            max_feature_id = max(max_feature_id, max(label))
+    # Find the highest feature_id in the genuine training set
+    max_feature_id = max(genuine_train_ids) if genuine_train_ids else 0
+    print(f"Highest feature_id in genuine training set: {max_feature_id}")
     
-    print(f"Highest feature_id in genuine dataset: {max_feature_id}")
-    
-    # Initialize new labels array with genuine labels
-    augmented_labels = genuine_labels.tolist()
+    # Initialize new labels array with genuine training labels
+    augmented_labels = []
+    for label, feature_ids in genuine_train_dict.items():
+        for feature_id in feature_ids:
+            augmented_labels.append([label, feature_id])
     
     # Add synthetic samples for each category
     for label in [0, 1, 2]:
@@ -169,10 +292,10 @@ def create_augmented_dataset(genuine_path, synthetic_path, output_path, percenta
     np.save(os.path.join(output_label_dir, "label.npy"), augmented_labels)
     
     # Print summary
-    original_count = len(genuine_labels)
+    original_count = len(genuine_train_ids)
     added_count = len(augmented_labels) - original_count
-    print(f"Augmented dataset created: {original_count} genuine + {added_count} synthetic = {len(augmented_labels)} total samples")
-    print(f"Files saved to: {output_path}")
+    print(f"Augmented training set: {original_count} genuine + {added_count} synthetic = {len(augmented_labels)} total samples")
+    print(f"Files saved to: {output_dir}")
 
 def main():
     args = parse_args()
@@ -187,20 +310,33 @@ def main():
         print(f"Error: Invalid percentages format. Using default: 20,40,60,100")
         percentages = [20, 40, 60, 100]
     
-    print(f"Will create augmented datasets with the following percentages: {percentages}")
+    print(f"Will create splits and augmented training sets with percentages: {percentages}")
     
-    # Create augmented datasets for each percentage
+    # First, create train/test split with only genuine data
+    genuine_train_dict, genuine_train_ids = create_train_test_split(
+        args.genuine_dataset,
+        args.output_dir,
+        args.test_size,
+        args.stratify,
+        args.seed
+    )
+    
+    # Then, create augmented training sets for each percentage
     for percentage in percentages:
-        output_path = os.path.join(args.output_dir, f"augmented_{percentage}pct")
-        create_augmented_dataset(
-            args.genuine_dataset,
+        output_path = os.path.join(args.output_dir, f"train_augmented_{percentage}pct")
+        augment_training_set(
+            genuine_train_dict,
+            genuine_train_ids,
             args.synthetic_dataset,
             output_path,
             percentage,
             args.seed
         )
     
-    print("\nAll augmented datasets created successfully!")
+    print("\nAll datasets created successfully!")
+    print("\nTo use these datasets for training and evaluation:")
+    print(f"1. Train on any augmented set: {args.output_dir}/train_augmented_XXpct")
+    print(f"2. Test on the genuine test set: {args.output_dir}/test_genuine")
 
 if __name__ == "__main__":
     main()
