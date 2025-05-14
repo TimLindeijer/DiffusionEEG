@@ -2,8 +2,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=24:00:00
-#SBATCH --job-name=mlr-40
-#SBATCH --output=outputs/mlr_40_%j.out
+#SBATCH --job-name=mlr-60
+#SBATCH --output=outputs/mlr_60_%j.out
 
 # Activate environment (adjust based on your system)
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
@@ -14,10 +14,10 @@ conda activate green-env
 # pip install lightning
 
 # Set paths
-DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_ready_datasets/train_augmented_40pct"
+DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_ready_datasets/train_augmented_60pct"
 TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ml_ready_datasets/test_genuine"
 OUTPUT_DIR="results/ldm_mixed_classification"
-RUN_NAME="LDM_40_NORMALIZE_$(date +%Y%m%d_%H%M%S)"
+RUN_NAME="LDM_60_NORMALIZE_$(date +%Y%m%d_%H%M%S)"
 
 # W&B Authentication - using API key from file
 export WANDB_API_KEY=$(cat ~/.wandb_key)
