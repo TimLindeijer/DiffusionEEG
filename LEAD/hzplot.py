@@ -6,7 +6,8 @@ import os
 # File path
 # path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_CAUEEG2/Feature/feature_01.npy'
 # path = '/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/src/generated_patients/synthetic_patient_hc_e71_seed42_20250509_132529.npy'
-path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_1000TP/Feature/feature_02.npy'
+# path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_1000TP/Feature/feature_02.npy'
+path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized/Feature/feature_01.npy'
 
 # Output directory
 output_dir = 'images'
@@ -41,7 +42,7 @@ epochs = mne.EpochsArray(data, info)
 # Plot PSD for all channels
 print("Computing and plotting PSD...")
 psd_fig = epochs.compute_psd(method="welch", fmin=1, fmax=30).plot(average=True)
-psd_fig.savefig(os.path.join(output_dir, 'ldm_eeg_psd_all_channels_feature02_1000TP.png'))
+psd_fig.savefig(os.path.join(output_dir, 'ldm_norm_eeg_psd_all_channels_feature02_1000TP.png'))
 print(f"Saved PSD plot to {os.path.join(output_dir, 'lead_eeg_psd_all_channels_ft01.png')}")
 
 # # Plot PSDs for individual channels
@@ -55,7 +56,7 @@ print(f"Saved PSD plot to {os.path.join(output_dir, 'lead_eeg_psd_all_channels_f
 # Plot a sample of the raw data
 print("Plotting raw data sample...")
 raw_fig = epochs[0].plot(scalings='auto')
-plt.savefig(os.path.join(output_dir, 'ldm_eeg_raw_sample_feat02_1000TP.png'))
+plt.savefig(os.path.join(output_dir, 'ldm_norm_eeg_raw_sample_feat02_1000TP.png'))
 print(f"Saved raw data plot to {os.path.join(output_dir, 'lead_eeg_raw_sample_feat01.png')}")
 
 print("All plots generated successfully!")

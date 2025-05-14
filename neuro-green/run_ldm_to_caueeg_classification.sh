@@ -14,10 +14,10 @@ conda activate green-env
 # pip install lightning
 
 # Set paths
-DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_1000TP"
-TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2"
-OUTPUT_DIR="results/ldm_fixed_classification"
-RUN_NAME="LDM_to_CAUEEG_$(date +%Y%m%d_%H%M%S)"
+DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized"
+TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ml_ready_datasets/test_genuine"
+OUTPUT_DIR="results/LDM_Norm_fixed_classification"
+RUN_NAME="LDM_Norm_to_CAUEEG_$(date +%Y%m%d_%H%M%S)"
 
 # W&B Authentication - using API key from file
 export WANDB_API_KEY=$(cat ~/.wandb_key)
