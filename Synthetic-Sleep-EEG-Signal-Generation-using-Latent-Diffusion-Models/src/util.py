@@ -231,7 +231,8 @@ def log_spectral(
     name_original = f"original_spe_{name}_{step}.pkl"
     name_reconstr = f"reconstr_spe_{name}_{step}.pkl"
     fig_name = f"compare_{name}_{step}.pdf"
-    fig.savefig(str(run_dir / fig_name), bbox_inches='tight')
+    fig_name = fig_name.replace('.pdf', '.png')
+    fig.savefig(str(run_dir / fig_name), bbox_inches='tight', format='png')
     with open(str(run_dir / name_original), 'wb') as fo:  
         joblib.dump(spectral, fo)
     with open(str(run_dir / name_reconstr), 'wb') as fo:  

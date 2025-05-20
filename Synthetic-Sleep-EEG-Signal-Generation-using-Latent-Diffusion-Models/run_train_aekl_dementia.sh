@@ -38,8 +38,8 @@ python -u src/train_autoencoderkl.py \
     --path_pre_processed /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
     --label_filter dementia \
     --spe spectral \
-    --clip_grad 0.5 \
-    --spectral_cap 10  
+    --config_file /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_encoder_eeg_new.yaml
+
 
 # Record completion
 echo "Job completed/interrupted at $(date)"

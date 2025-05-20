@@ -69,8 +69,25 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
 
 
 def Normalize(in_channels):
+    """
+    Normalization layer with automatic group adjustment for any channel count.
+    """
+    # Find the largest divisor of in_channels that is <= 32
+    for num_groups in [32, 16, 8, 4, 2, 1]:
+        if in_channels % num_groups == 0:
+            return nn.GroupNorm(
+                num_groups=num_groups, 
+                num_channels=in_channels, 
+                eps=1e-6, 
+                affine=True
+            )
+    
+    # Fallback to 1 group if no clean divisors found
     return nn.GroupNorm(
-        num_groups=32, num_channels=in_channels, eps=1e-6, affine=True
+        num_groups=1,  # This is equivalent to InstanceNorm
+        num_channels=in_channels, 
+        eps=1e-6, 
+        affine=True
     )
 
 
@@ -189,10 +206,10 @@ class Downsample(nn.Module):
         if use_conv:
             self.op = nn.Conv1d(
                 self.channels, self.out_channels, 3, stride=2, padding=padding
-            )#TODO:Mudar
+            )
         else:
             assert self.channels == self.out_channels
-            self.op = nn.AvgPool1d(kernel_size=2, stride=2)#TODO: Mudar
+            self.op = nn.AvgPool1d(kernel_size=2, stride=2)
 
     def forward(self, x):
         assert x.shape[1] == self.channels
@@ -214,7 +231,7 @@ class Upsample(nn.Module):
         if use_conv:
             self.conv = nn.Conv1d(
                 self.channels, self.out_channels, 3, padding=padding
-            )#TODO:Mudar
+            )
 
     def forward(self, x):
         assert x.shape[1] == self.channels
@@ -297,9 +314,9 @@ class ResBlock(TimestepBlock):
         elif use_conv:
             self.skip_connection = nn.Conv1d(
                 channels, self.out_channels, 3, padding=1
-            )#TODO:Mudar
+            )
         else:
-            self.skip_connection = nn.Conv1d(channels, self.out_channels, 1)#TODO:Mudar
+            self.skip_connection = nn.Conv1d(channels, self.out_channels, 1)
 
     def forward(self, x, emb):
         return self._forward(x, emb)
@@ -346,8 +363,7 @@ class UNetModel(nn.Module):
         use_scale_shift_norm=False,
         resblock_updown=False,
         n_embed=None,
-        # custom support for prediction of discrete
-        # ids into codebook of first stage vq model
+        preserve_size=True,  # Added parameter to control size preservation
     ):
         super().__init__()
 
@@ -368,6 +384,7 @@ class UNetModel(nn.Module):
         self.num_head_channels = num_head_channels
         self.num_heads_upsample = num_heads_upsample
         self.predict_codebook_ids = n_embed is not None
+        self.preserve_size = preserve_size  # Store the preserve_size parameter
 
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
@@ -383,7 +400,7 @@ class UNetModel(nn.Module):
             [
                 TimestepEmbedSequential(
                     nn.Conv1d(in_channels, model_channels, 3, padding=1)
-                )#TODO:Mudar
+                )
             ]
         )
         self._feature_size = model_channels
@@ -502,12 +519,12 @@ class UNetModel(nn.Module):
             Normalize(ch),
             nn.SiLU(),
             zero_module(nn.Conv1d(model_channels, out_channels, 3, padding=1)),
-        )#TODO:Mudar
+        )
         if self.predict_codebook_ids:
             self.id_predictor = nn.Sequential(
                 Normalize(ch),
                 nn.Conv1d(model_channels, n_embed, 1),
-            )#TODO:Mudar
+            )
 
     def forward(self, x, timesteps=None, context=None, y=None, **kwargs):
         """
@@ -522,6 +539,10 @@ class UNetModel(nn.Module):
             self.num_classes is not None
         ), "must specify y if and only if the model is class-conditional"
         assert timesteps is not None, "need to implement no-timestep usage"
+        
+        # Store the input shape for later dimension matching
+        input_shape = x.shape
+        
         hs = []
         t_emb = timestep_embedding(
             timesteps, self.model_channels, repeat_only=False
@@ -539,25 +560,39 @@ class UNetModel(nn.Module):
         h = self.middle_block(h, emb, context)
 
         for module in self.output_blocks:
-            h_pop =  hs.pop()
-            #print(h.shape, h_pop.shape)
-            if (h.shape[2] != h_pop.shape[2]):
+            h_pop = hs.pop()
+            
+            # Handle dimension mismatch between skip connection and current features
+            if h.shape[2] != h_pop.shape[2]:
+                # Store the difference for debugging
                 diff = abs(h.shape[2] - h_pop.shape[2])
-                print(f"after, {diff}")
-                print(h.shape, h_pop.shape)
-                #import pdb; pdb.set_trace()
-                h_pop = h_pop[:,:,:-diff]
-                print("before")
-                print(h.shape, h_pop.shape)
                 
-            h = th.cat([h,h_pop], dim=1)
+                # Option 1: Trim the larger tensor to match the smaller one
+                if h_pop.shape[2] > h.shape[2]:
+                    # If skip connection is larger, trim it
+                    h_pop = h_pop[:, :, :h.shape[2]]
+                else:
+                    # If current features are larger, pad the skip connection
+                    padding = h.shape[2] - h_pop.shape[2]
+                    h_pop = F.pad(h_pop, (0, padding), mode='replicate')
             
+            h = th.cat([h, h_pop], dim=1)
             h = module(h, emb, context)
-            #import pdb; pdb.set_trace()
-        #print("oi")
+
+        # Final processing
         if self.predict_codebook_ids:
-            
-            # return self.out(h), self.id_predictor(h)
-            return self.id_predictor(h)
+            out = self.id_predictor(h)
         else:
-            return self.out(h)
+            out = self.out(h)
+        
+        # Ensure output dimensions match input if preserve_size is True
+        if self.preserve_size and out.shape[2] != input_shape[2]:
+            if out.shape[2] < input_shape[2]:
+                # If output is smaller, pad it
+                padding = input_shape[2] - out.shape[2]
+                out = F.pad(out, (0, padding), mode='replicate')
+            else:
+                # If output is larger, trim it
+                out = out[:, :, :input_shape[2]]
+        
+        return out

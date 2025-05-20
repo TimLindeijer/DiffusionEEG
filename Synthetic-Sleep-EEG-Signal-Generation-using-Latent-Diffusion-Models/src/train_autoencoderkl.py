@@ -54,7 +54,7 @@ def parse_args():
     parser.add_argument(
         "--config_file",
         type=str,
-        default="/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_encoder_eeg.yaml",
+        default="/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_encoder_eeg_new.yaml",
         help="Path to config file with all the training parameters needed",
     )
     parser.add_argument(
@@ -340,8 +340,8 @@ def main(args):
         # For CAUEEG2, reshape from [batch, 1, 19, 1000] to [batch, 19, 1000]
         init_batch = init_batch_raw.squeeze(1)
         # Apply padding slicing if needed
-        if init_batch.dim() == 3:  # Check if dimensions are correct
-            init_batch = init_batch[:, :, 36:-36]
+        # if init_batch.dim() == 3:  # Check if dimensions are correct
+        #     init_batch = init_batch[:, :, 36:-36]
     else:
         # For other datasets, keep the original behavior
         init_batch = init_batch_raw[:, :, 36:-36]
@@ -576,9 +576,9 @@ def main(args):
                         vis_eeg = eeg_data
                         vis_recon = reconstruction
                         # Add slicing if needed
-                        if vis_eeg.dim() == 3 and vis_eeg.shape[2] > 72:  # Check if padding should be removed
-                            vis_eeg = vis_eeg[:, :, 36:-36]
-                            vis_recon = vis_recon[:, :, 36:-36]
+                        # if vis_eeg.dim() == 3 and vis_eeg.shape[2] > 72:  # Check if padding should be removed
+                            # vis_eeg = vis_eeg[:, :, 36:-36]
+                            # vis_recon = vis_recon[:, :, 36:-36]
                     else:
                         vis_eeg = eeg_data[:, :, 36:-36]
                         vis_recon = reconstruction[:, :, 36:-36]

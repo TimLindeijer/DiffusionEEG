@@ -3,7 +3,7 @@
 #SBATCH --partition=gpu
 #SBATCH --time=48:00:00
 #SBATCH --job-name=aekl_hc
-#SBATCH --output=outputs/aekl_caueeg_hc_4channels.out
+#SBATCH --output=outputs/aekl_caueeg2_hc_%j.out
 #SBATCH --signal=B:USR1@300
 #SBATCH --requeue
 
@@ -25,6 +25,7 @@ echo "Job started at $(date)"
 uenv verbose cuda-11.8.0 cudnn-11.x-8.7.0
 uenv miniconda3-py39
 conda activate ldm-eeg
+pip install seaborn
 
 cd Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models
 
@@ -38,8 +39,7 @@ python src/train_autoencoderkl.py \
     --path_pre_processed /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
     --label_filter hc \
     --spe spectral \
-    --clip_grad 0.5 \
-    --spectral_cap 10  
+    --config_file /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_encoder_eeg_new.yaml
 
 # Record completion
 echo "Job completed/interrupted at $(date)"

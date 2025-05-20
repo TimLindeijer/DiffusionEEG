@@ -3,7 +3,7 @@
 #SBATCH --partition=gpu
 #SBATCH --time=48:00:00
 #SBATCH --job-name=ldm_mci
-#SBATCH --output=outputs/ldm_caueeg_mci_4ch.out
+#SBATCH --output=outputs/ldm_caueeg2_mci.out
 #SBATCH --signal=B:USR1@300
 #SBATCH --requeue
 
@@ -41,11 +41,11 @@ python src/train_ldm.py \
     --dataset caueeg2 \
     --path_pre_processed /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
     --label_filter mci \
-    --num_channels "[4, 8, 16, 32]" \
-    --latent_channels 4 \
-    --best_model_path "/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/aekl_eeg_4channels_label_mci" \
-    --autoencoderkl_config_file_path "/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_encoder_eeg.yaml" \
-    --config_file "/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_ldm.yaml"
+    --num_channels "[16, 32, 64, 128]" \
+    --latent_channels 8 \
+    --best_model_path "/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/aekl_eeg_caueeg2_label_mci" \
+    --autoencoderkl_config_file_path "/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_encoder_eeg_new.yaml" \
+    --config_file "/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_ldm_new.yaml"
 
 # Record completion
 echo "Job completed/interrupted at $(date)"
