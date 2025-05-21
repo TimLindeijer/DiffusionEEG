@@ -2,12 +2,10 @@ import numpy as np
 import mne
 import matplotlib.pyplot as plt
 import os
+from scipy import signal
 
 # File path
-# path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_CAUEEG2/Feature/feature_01.npy'
-# path = '/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/src/generated_patients/synthetic_patient_hc_e71_seed42_20250509_132529.npy'
-# path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_1000TP/Feature/feature_02.npy'
-path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized/Feature/feature_01.npy'
+path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_100SPECTRAL/Feature/feature_01.npy'
 
 # Output directory
 output_dir = 'images'
@@ -26,8 +24,22 @@ if data.shape[2] == 19:
     print(f"Transposed data shape: {data.shape}")
 n_epochs, n_channels, n_times = data.shape
 
-# Confirm data dimensions
-print(f"Epochs: {n_epochs}, Channels: {n_channels}, Timepoints: {n_times}")
+# Check for problematic values
+print(f"NaN values: {np.isnan(data).any()}")
+print(f"Inf values: {np.isinf(data).any()}")
+print(f"Data range: {np.min(data)} to {np.max(data)}")
+print(f"Zero values only: {np.allclose(data, 0, atol=1e-10)}")
+
+# Fix data if needed
+if np.isnan(data).any() or np.isinf(data).any():
+    # Replace NaN/Inf with small values
+    data = np.nan_to_num(data, nan=1e-6, posinf=1.0, neginf=-1.0)
+    print("Replaced NaN/Inf values")
+
+# Add tiny jitter if data is all zeros or very small
+if np.allclose(data, 0, atol=1e-6):
+    data = data + np.random.normal(0, 1e-5, data.shape)
+    print("Added small jitter to avoid all-zero data")
 
 # Generate dummy channel names just for plotting
 channel_names = [f"EEG {i+1}" for i in range(n_channels)]
@@ -36,27 +48,81 @@ channel_types = ["eeg"] * n_channels
 # Create MNE info structure
 info = mne.create_info(ch_names=channel_names, sfreq=sfreq, ch_types=channel_types)
 
-# Create MNE Epochs object - data is already in the right shape (n_epochs, n_channels, n_times)
+# Create MNE Epochs object
 epochs = mne.EpochsArray(data, info)
 
-# Plot PSD for all channels
-print("Computing and plotting PSD...")
-psd_fig = epochs.compute_psd(method="welch", fmin=1, fmax=30).plot(average=True)
-psd_fig.savefig(os.path.join(output_dir, 'ldm_norm_eeg_psd_all_channels_feature02_1000TP.png'))
-print(f"Saved PSD plot to {os.path.join(output_dir, 'lead_eeg_psd_all_channels_ft01.png')}")
+# Function to plot PSD using scipy's welch method (more robust)
+def plot_psd_scipy(data, sfreq, fmin=1, fmax=30):
+    n_epochs, n_channels, n_times = data.shape
+    
+    # Calculate frequencies
+    freqs, _ = signal.welch(data[0, 0], fs=sfreq, nperseg=min(256, n_times))
+    
+    # Filter frequencies
+    mask = (freqs >= fmin) & (freqs <= fmax)
+    freqs = freqs[mask]
+    
+    # Calculate PSD for all channels and epochs
+    psd_all = np.zeros((n_epochs, n_channels, len(freqs)))
+    
+    for epoch_idx in range(n_epochs):
+        for ch_idx in range(n_channels):
+            _, psd = signal.welch(data[epoch_idx, ch_idx], fs=sfreq, nperseg=min(256, n_times))
+            psd_all[epoch_idx, ch_idx] = psd[mask]
+    
+    # Average across epochs
+    psd_avg = np.mean(psd_all, axis=0)
+    
+    # Plot
+    plt.figure(figsize=(12, 8))
+    for ch_idx in range(n_channels):
+        plt.semilogy(freqs, psd_avg[ch_idx], label=f'Channel {ch_idx+1}')
+    
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('PSD (µV²/Hz)')
+    plt.title('Power Spectral Density')
+    plt.legend()
+    plt.grid(True)
+    
+    return plt.gcf()
 
-# # Plot PSDs for individual channels
-# print("Plotting individual channel PSDs...")
-# for ch_idx in range(min(n_channels, 6)):  # Plot first 6 channels (or fewer if there are less)
-#     ch_name = channel_names[ch_idx]
-#     ch_fig = epochs.compute_psd(method="welch", fmin=1, fmax=30, picks=[ch_idx]).plot(average=True)
-#     ch_fig.savefig(os.path.join(output_dir, f'synthetic_eeg_psd_channel_{ch_idx+1}.png'))
-#     print(f"Saved PSD plot for channel {ch_name} to {os.path.join(output_dir, f'synthetic_eeg_psd_channel_{ch_idx+1}.png')}")
+# Plot PSD using scipy (more robust method)
+print("Computing and plotting PSD using scipy...")
+psd_fig = plot_psd_scipy(data, sfreq=sfreq, fmin=1, fmax=30)
+psd_fig.savefig(os.path.join(output_dir, 'ldm_100spectral_eeg_psd_all_channels_feature01_1000TP.png'))
+print(f"Saved PSD plot to {os.path.join(output_dir, 'ldm_100spectral_eeg_psd_all_channels_feature01_1000TP.png')}")
+
+# Try MNE's method as a fallback
+try:
+    print("Attempting MNE's PSD calculation...")
+    # Use multitaper method instead of welch
+    psd_mne_fig = epochs.compute_psd(method="multitaper", fmin=1, fmax=30).plot(average=True)
+    psd_mne_fig.savefig(os.path.join(output_dir, 'ldm_100spectral_eeg_psd_mne_method.png'))
+    print(f"Saved MNE PSD plot")
+except Exception as e:
+    print(f"MNE PSD calculation failed: {e}")
 
 # Plot a sample of the raw data
 print("Plotting raw data sample...")
-raw_fig = epochs[0].plot(scalings='auto')
-plt.savefig(os.path.join(output_dir, 'ldm_norm_eeg_raw_sample_feat02_1000TP.png'))
-print(f"Saved raw data plot to {os.path.join(output_dir, 'lead_eeg_raw_sample_feat01.png')}")
+fig, ax = plt.subplots(n_channels, 1, figsize=(12, 2*n_channels), sharex=True)
+time = np.arange(n_times) / sfreq
+
+for ch_idx in range(n_channels):
+    if n_channels > 1:
+        ax[ch_idx].plot(time, data[0, ch_idx])
+        ax[ch_idx].set_ylabel(f"Ch {ch_idx+1}")
+    else:
+        ax.plot(time, data[0, ch_idx])
+        ax.set_ylabel(f"Ch {ch_idx+1}")
+
+# Add labels
+if n_channels > 1:
+    ax[-1].set_xlabel("Time (s)")
+else:
+    ax.set_xlabel("Time (s)")
+
+plt.tight_layout()
+plt.savefig(os.path.join(output_dir, 'ldm_100spectral_eeg_raw_sample_feat01_1000TP.png'))
+print(f"Saved raw data plot")
 
 print("All plots generated successfully!")

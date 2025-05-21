@@ -293,6 +293,7 @@ def plot_confusion_matrix(y_true, y_pred, output_dir, use_wandb=False):
     """
     Plot confusion matrix and save to output directory.
     Using class names instead of numeric labels.
+    Handles both binary discrimination task and multi-class classification.
     Optionally log to wandb.
     """
     # Get unique classes
@@ -301,8 +302,13 @@ def plot_confusion_matrix(y_true, y_pred, output_dir, use_wandb=False):
     # Create confusion matrix
     cm = confusion_matrix(y_true, y_pred, labels=classes)
     
-    # Get class names for the labels
-    class_names = [CLASS_NAMES[c] for c in classes]
+    # Check if this is a binary discrimination task
+    if len(classes) <= 2 and max(classes) <= 1:
+        # Binary discrimination task
+        class_names = ["Genuine", "Synthetic"]
+    else:
+        # Original 3-class problem
+        class_names = [CLASS_NAMES[c] for c in classes]
     
     plt.figure(figsize=(10, 8))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
@@ -324,7 +330,7 @@ def plot_confusion_matrix(y_true, y_pred, output_dir, use_wandb=False):
 def evaluate_prediction_results(all_preds, output_dir, use_wandb=False):
     """
     Evaluate prediction results and save detailed reports.
-    Using class names instead of numeric labels.
+    Handles both binary discrimination tasks and multi-class classification.
     Optionally log to wandb.
     """
     # Extract true and predicted labels
@@ -336,6 +342,17 @@ def evaluate_prediction_results(all_preds, output_dir, use_wandb=False):
     # Generate classification report
     report = classification_report(y_true, y_pred, output_dict=True)
     
+    # Check if this is a binary discrimination task or multi-class classification
+    unique_classes = sorted(set(y_true) | set(y_pred))
+    is_binary_task = len(unique_classes) <= 2
+    
+    if is_binary_task:
+        # For binary discrimination task (genuine vs synthetic)
+        class_mapping = {0: "Genuine", 1: "Synthetic"}
+    else:
+        # For original 3-class problem
+        class_mapping = CLASS_NAMES
+    
     # Convert the report to use class names
     named_report = {}
     for key, value in report.items():
@@ -343,8 +360,8 @@ def evaluate_prediction_results(all_preds, output_dir, use_wandb=False):
             # This is a class label, convert to class name
             try:
                 class_label = int(float(key))
-                if class_label in CLASS_NAMES:
-                    named_report[CLASS_NAMES[class_label]] = value
+                if class_label in class_mapping:
+                    named_report[class_mapping[class_label]] = value
                 else:
                     named_report[key] = value
             except ValueError:
@@ -356,47 +373,65 @@ def evaluate_prediction_results(all_preds, output_dir, use_wandb=False):
     # Add balanced accuracy to the report
     named_report['balanced_accuracy'] = balanced_acc
     
-    # Calculate balanced average metrics
-    classes = sorted(set(y_true))
+    # Calculate balanced average metrics - adapted to handle binary case
+    classes = unique_classes
     class_indices = {cls: i for i, cls in enumerate(classes)}
     y_true_bin = label_binarize(y_true, classes=classes)
     y_pred_bin = label_binarize(y_pred, classes=classes)
     
-    # Initialize balanced metrics
-    balanced_precision = 0
-    balanced_recall = 0
-    balanced_f1 = 0
-    n_classes = len(classes)
-    
-    # Get class weights
-    class_counts = np.bincount(y_true.astype(int))
-    weights = 1 / (class_counts / np.sum(class_counts) * n_classes)
-    
-    # Calculate per-class metrics with balancing
-    for i, cls in enumerate(classes):
-        cls_idx = class_indices[cls]
-        true_cls = y_true_bin[:, cls_idx]
-        pred_cls = y_pred_bin[:, cls_idx]
+    # If binary task with only one column in binarized output, handle differently
+    if is_binary_task and y_true_bin.shape[1] == 1:
+        # For binary case with single column output
+        precision = precision_score(y_true, y_pred, zero_division=0)
+        recall = recall_score(y_true, y_pred, zero_division=0)
+        if precision + recall > 0:  # Avoid division by zero
+            f1 = 2 * (precision * recall) / (precision + recall)
+        else:
+            f1 = 0
+            
+        balanced_precision = precision
+        balanced_recall = recall
+        balanced_f1 = f1
+    else:
+        # Initialize balanced metrics
+        balanced_precision = 0
+        balanced_recall = 0
+        balanced_f1 = 0
+        n_classes = len(classes)
         
-        if np.sum(true_cls) > 0:  # Avoid division by zero
-            precision = precision_score(true_cls, pred_cls, zero_division=0)
-            recall = recall_score(true_cls, pred_cls, zero_division=0)
-            if precision + recall > 0:  # Avoid division by zero
-                f1 = 2 * (precision * recall) / (precision + recall)
-            else:
-                f1 = 0
+        # Get class weights
+        class_counts = np.bincount(y_true.astype(int), minlength=max(classes)+1)
+        class_counts = class_counts[classes]  # Keep only the counts for classes we have
+        weights = 1 / (class_counts / np.sum(class_counts) * n_classes)
+        
+        # Calculate per-class metrics with balancing
+        for i, cls in enumerate(classes):
+            cls_idx = class_indices[cls]
+            
+            # Handle potential index out of bounds for binary case
+            if cls_idx < y_true_bin.shape[1]:
+                true_cls = y_true_bin[:, cls_idx]
+                pred_cls = y_pred_bin[:, cls_idx]
                 
-            # Update balanced metrics with class weight
-            class_weight = weights[cls] if cls < len(weights) else 1.0
-            balanced_precision += precision * class_weight
-            balanced_recall += recall * class_weight
-            balanced_f1 += f1 * class_weight
-    
-    # Normalize by sum of weights
-    total_weight = np.sum([weights[cls] if cls < len(weights) else 1.0 for cls in classes])
-    balanced_precision /= total_weight
-    balanced_recall /= total_weight
-    balanced_f1 /= total_weight
+                if np.sum(true_cls) > 0:  # Avoid division by zero
+                    precision = precision_score(true_cls, pred_cls, zero_division=0)
+                    recall = recall_score(true_cls, pred_cls, zero_division=0)
+                    if precision + recall > 0:  # Avoid division by zero
+                        f1 = 2 * (precision * recall) / (precision + recall)
+                    else:
+                        f1 = 0
+                        
+                    # Update balanced metrics with class weight
+                    class_weight = weights[i] if i < len(weights) else 1.0
+                    balanced_precision += precision * class_weight
+                    balanced_recall += recall * class_weight
+                    balanced_f1 += f1 * class_weight
+        
+        # Normalize by sum of weights
+        total_weight = np.sum([weights[i] if i < len(weights) else 1.0 for i in range(len(classes))])
+        balanced_precision /= total_weight
+        balanced_recall /= total_weight
+        balanced_f1 /= total_weight
     
     # Add balanced average to report
     named_report['balanced avg'] = {
@@ -416,7 +451,7 @@ def evaluate_prediction_results(all_preds, output_dir, use_wandb=False):
     
     # Count number of examples per class with names
     class_counts = pd.Series(y_true).value_counts().sort_index()
-    named_counts = pd.Series({CLASS_NAMES[k]: v for k, v in class_counts.items()})
+    named_counts = pd.Series({class_mapping.get(k, k): v for k, v in class_counts.items()})
     named_counts.to_csv(os.path.join(output_dir, 'class_counts.csv'))
     
     # Print summary with class names
@@ -437,7 +472,7 @@ def evaluate_prediction_results(all_preds, output_dir, use_wandb=False):
         # Log per-class metrics
         for class_label, metrics in named_report.items():
             if isinstance(metrics, dict) and 'precision' in metrics:
-                class_name = class_label.replace(" ", "_").replace("(", "").replace(")", "").replace("+", "plus")
+                class_name = str(class_label).replace(" ", "_").replace("(", "").replace(")", "").replace("+", "plus")
                 wandb.log({
                     f"test_{class_name}_precision": metrics['precision'],
                     f"test_{class_name}_recall": metrics['recall'],
