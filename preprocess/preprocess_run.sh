@@ -8,9 +8,6 @@
 uenv verbose cuda-11.4 cudnn-11.4-8.2.4
 uenv miniconda3-py311
 conda activate /home/stud/timlin/.conda/envs/DiffusionEEG
-echo "Activated environment path: $CONDA_PREFIX"
-echo "Python executable: $(which python)"
-echo "Python version: $(python --version)"
 
 #pip list
 python -u preprocess.py
