@@ -2,8 +2,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=48:00:00
-#SBATCH --job-name=augment_dataset
-#SBATCH --output=outputs/augment_dataset_caueeg2.out
+#SBATCH --job-name=balance_dataset
+#SBATCH --output=outputs/balance_dataset_caueeg2.out
 
 # Report which node we're running on
 echo "Running on $(hostname)"
@@ -16,10 +16,13 @@ conda activate ldm-eeg
 
 cd Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models
 
-python src/dataset_creation/augment_dataset.py \
+# Can balance to max, mean or to a specific number
+python src/dataset_creation/balance_dataset.py \
   --genuine_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
   --synthetic_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized \
-  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_ready_datasets \
+  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_balanced_datasets \
   --test_size 0.2 \
   --stratify \
-  --percentages 20,40,60,80,100
+  --balance_to max
+
+echo "Job finished at $(date)"
