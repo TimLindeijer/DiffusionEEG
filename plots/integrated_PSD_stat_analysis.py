@@ -1,0 +1,441 @@
+import numpy as np
+import mne
+import matplotlib.pyplot as plt
+import os
+from scipy import signal
+from scipy.ndimage import label
+from tqdm import tqdm
+import warnings
+warnings.filterwarnings('ignore')
+
+def load_and_preprocess_data(path, sfreq=200):
+    """Load and preprocess EEG data from .npy file"""
+    data = np.load(path)
+    print(f"Original data shape: {data.shape}")
+    
+    # Handle data shape - ensure (n_epochs, n_channels, n_times)
+    if data.shape[2] == 19:  # Assuming 19 channels
+        data = data.transpose(0, 2, 1) 
+        print(f"Transposed data shape: {data.shape}")
+    
+    n_epochs, n_channels, n_times = data.shape
+    
+    # Check for problematic values
+    print(f"NaN values: {np.isnan(data).any()}")
+    print(f"Inf values: {np.isinf(data).any()}")
+    print(f"Data range: {np.min(data)} to {np.max(data)}")
+    
+    # Fix data if needed
+    if np.isnan(data).any() or np.isinf(data).any():
+        data = np.nan_to_num(data, nan=1e-6, posinf=1.0, neginf=-1.0)
+        print("Replaced NaN/Inf values")
+    
+    # Add tiny jitter if data is all zeros
+    if np.allclose(data, 0, atol=1e-6):
+        data = data + np.random.normal(0, 1e-5, data.shape)
+        print("Added small jitter to avoid all-zero data")
+    
+    return data, n_epochs, n_channels, n_times
+
+def calculate_psd_for_statistical_analysis(data, sfreq, fmin=1, fmax=30, nperseg=None):
+    """
+    Calculate PSD data in format needed for statistical analysis.
+    
+    Parameters:
+    -----------
+    data : array, shape (n_epochs, n_channels, n_times)
+        EEG data
+    sfreq : float
+        Sampling frequency
+    fmin, fmax : float
+        Frequency range for analysis
+    nperseg : int, optional
+        Length of each segment for Welch's method
+        
+    Returns:
+    --------
+    psd_data : array, shape (n_epochs, n_channels, n_freqs)
+        PSD data for each epoch, channel, and frequency
+    freqs : array
+        Frequency values
+    """
+    n_epochs, n_channels, n_times = data.shape
+    
+    # Set nperseg if not provided
+    if nperseg is None:
+        nperseg = min(256, n_times)
+    
+    # Calculate frequencies using first epoch/channel
+    freqs, _ = signal.welch(data[0, 0], fs=sfreq, nperseg=nperseg)
+    
+    # Filter to desired frequency range
+    mask = (freqs >= fmin) & (freqs <= fmax)
+    freqs = freqs[mask]
+    
+    # Initialize PSD array
+    psd_data = np.zeros((n_epochs, n_channels, len(freqs)))
+    
+    print("Calculating PSDs for all epochs and channels...")
+    
+    # Calculate PSD for each epoch and channel
+    for epoch_idx in tqdm(range(n_epochs), desc="Processing epochs"):
+        for ch_idx in range(n_channels):
+            _, psd = signal.welch(data[epoch_idx, ch_idx], fs=sfreq, nperseg=nperseg)
+            psd_data[epoch_idx, ch_idx] = psd[mask]
+    
+    return psd_data, freqs
+
+class PSDStatisticalComparison:
+    def __init__(self, n_permutations=1000, alpha=0.05, cluster_alpha=0.01):
+        self.n_permutations = n_permutations
+        self.alpha = alpha
+        self.cluster_alpha = cluster_alpha
+        
+    def permutation_test_single(self, real_data, synthetic_data):
+        """Perform permutation test for a single frequency-channel combination."""
+        observed_diff = np.mean(real_data) - np.mean(synthetic_data)
+        
+        combined_data = np.concatenate([real_data, synthetic_data])
+        n_real = len(real_data)
+        
+        perm_diffs = []
+        for _ in range(self.n_permutations):
+            shuffled = np.random.permutation(combined_data)
+            perm_real = shuffled[:n_real]
+            perm_synthetic = shuffled[n_real:]
+            perm_diff = np.mean(perm_real) - np.mean(perm_synthetic)
+            perm_diffs.append(perm_diff)
+        
+        perm_diffs = np.array(perm_diffs)
+        p_value = np.mean(np.abs(perm_diffs) >= np.abs(observed_diff))
+        
+        return p_value, observed_diff
+    
+    def mass_univariate_test(self, real_psds, synthetic_psds, freqs, channels):
+        """Perform mass-univariate permutation tests."""
+        n_channels, n_freqs = len(channels), len(freqs)
+        p_values = np.zeros((n_channels, n_freqs))
+        effect_sizes = np.zeros((n_channels, n_freqs))
+        
+        print("Running mass-univariate permutation tests...")
+        
+        total_tests = n_channels * n_freqs
+        pbar = tqdm(total=total_tests, desc="Testing freq-channel combinations")
+        
+        for ch_idx in range(n_channels):
+            for freq_idx in range(n_freqs):
+                real_data = real_psds[:, ch_idx, freq_idx]
+                synthetic_data = synthetic_psds[:, ch_idx, freq_idx]
+                
+                p_val, effect = self.permutation_test_single(real_data, synthetic_data)
+                
+                p_values[ch_idx, freq_idx] = p_val
+                effect_sizes[ch_idx, freq_idx] = effect
+                
+                pbar.update(1)
+        
+        pbar.close()
+        return p_values, effect_sizes
+    
+    def cluster_correction(self, p_values, freqs, channels):
+        """Apply cluster-based correction for multiple comparisons."""
+        uncorrected_sig = p_values < self.cluster_alpha
+        labeled_array, num_clusters = label(uncorrected_sig)
+        
+        significant_clusters = np.zeros_like(p_values, dtype=bool)
+        cluster_info = {}
+        
+        if num_clusters > 0:
+            print(f"Found {num_clusters} potential clusters, evaluating significance...")
+            
+            for cluster_id in range(1, num_clusters + 1):
+                cluster_mask = labeled_array == cluster_id
+                cluster_size = np.sum(cluster_mask)
+                cluster_p_values = p_values[cluster_mask]
+                min_p = np.min(cluster_p_values)
+                mean_p = np.mean(cluster_p_values)
+                
+                if cluster_size >= 3 and min_p < self.alpha:
+                    significant_clusters[cluster_mask] = True
+                    
+                    ch_indices, freq_indices = np.where(cluster_mask)
+                    freq_range = (freqs[freq_indices.min()], freqs[freq_indices.max()])
+                    ch_range = (channels[ch_indices.min()], channels[ch_indices.max()])
+                    
+                    cluster_info[cluster_id] = {
+                        'size': cluster_size,
+                        'min_p': min_p,
+                        'mean_p': mean_p,
+                        'freq_range': freq_range,
+                        'channel_range': ch_range,
+                        'channels': [channels[i] for i in np.unique(ch_indices)],
+                        'freq_indices': np.unique(freq_indices)
+                    }
+        
+        return significant_clusters, cluster_info
+    
+    def plot_statistical_heatmap(self, p_values, effect_sizes, significant_clusters, 
+                               freqs, channels, cluster_info=None, figsize=(15, 10)):
+        """Create comprehensive statistical heatmap visualization."""
+        fig, axes = plt.subplots(2, 2, figsize=figsize)
+        fig.suptitle('Statistical Comparison: Real vs Synthetic EEG PSDs', fontsize=16, fontweight='bold')
+        
+        # 1. P-values heatmap
+        ax1 = axes[0, 0]
+        im1 = ax1.imshow(-np.log10(p_values), aspect='auto', cmap='hot', interpolation='nearest')
+        ax1.set_title('Significance Map\n(-log10 p-values)')
+        ax1.set_xlabel('Frequency (Hz)')
+        ax1.set_ylabel('Channels')
+        
+        # Set frequency ticks
+        freq_ticks = np.linspace(0, len(freqs)-1, 6).astype(int)
+        ax1.set_xticks(freq_ticks)
+        ax1.set_xticklabels([f'{freqs[i]:.1f}' for i in freq_ticks])
+        
+        # Set channel ticks
+        ax1.set_yticks(range(len(channels)))
+        ax1.set_yticklabels(channels)
+        
+        plt.colorbar(im1, ax=ax1, label='-log10(p)')
+        
+        # Add significance threshold line
+        sig_threshold = -np.log10(self.alpha)
+        ax1.contour(-np.log10(p_values), levels=[sig_threshold], colors='white', linewidths=2)
+        
+        # 2. Effect sizes heatmap
+        ax2 = axes[0, 1]
+        im2 = ax2.imshow(effect_sizes, aspect='auto', cmap='RdBu_r', interpolation='nearest')
+        ax2.set_title('Effect Sizes\n(Real - Synthetic)')
+        ax2.set_xlabel('Frequency (Hz)')
+        ax2.set_ylabel('Channels')
+        
+        ax2.set_xticks(freq_ticks)
+        ax2.set_xticklabels([f'{freqs[i]:.1f}' for i in freq_ticks])
+        ax2.set_yticks(range(len(channels)))
+        ax2.set_yticklabels(channels)
+        
+        plt.colorbar(im2, ax=ax2, label='Power Difference')
+        
+        # 3. Significant clusters
+        ax3 = axes[1, 0]
+        im3 = ax3.imshow(significant_clusters.astype(int), aspect='auto', cmap='Reds', interpolation='nearest')
+        ax3.set_title('Significant Clusters\n(Cluster-corrected)')
+        ax3.set_xlabel('Frequency (Hz)')
+        ax3.set_ylabel('Channels')
+        
+        ax3.set_xticks(freq_ticks)
+        ax3.set_xticklabels([f'{freqs[i]:.1f}' for i in freq_ticks])
+        ax3.set_yticks(range(len(channels)))
+        ax3.set_yticklabels(channels)
+        
+        plt.colorbar(im3, ax=ax3, label='Significant')
+        
+        # 4. Summary statistics
+        ax4 = axes[1, 1]
+        ax4.axis('off')
+        
+        n_significant = np.sum(p_values < self.alpha)
+        n_total = p_values.size
+        percent_sig = (n_significant / n_total) * 100
+        n_clusters = len(cluster_info) if cluster_info else 0
+        
+        summary_text = f"""Statistical Summary:
+
+Total tests: {n_total:,}
+Significant (uncorrected): {n_significant:,} ({percent_sig:.1f}%)
+Significance level: α = {self.alpha}
+Permutations: {self.n_permutations:,}
+
+Cluster Analysis:
+Significant clusters: {n_clusters}
+Cluster threshold: α = {self.cluster_alpha}
+
+Effect Size Range:
+Min: {np.min(effect_sizes):.4f}
+Max: {np.max(effect_sizes):.4f}
+Mean: {np.mean(effect_sizes):.4f}
+"""
+        
+        ax4.text(0.05, 0.95, summary_text, transform=ax4.transAxes, fontsize=10,
+                verticalalignment='top', fontfamily='monospace',
+                bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+        
+        plt.tight_layout()
+        return fig
+    
+    def print_cluster_results(self, cluster_info, freqs):
+        """Print detailed cluster analysis results."""
+        if not cluster_info:
+            print("No significant clusters found.")
+            return
+            
+        print(f"\n{'='*60}")
+        print(f"SIGNIFICANT CLUSTERS ANALYSIS")
+        print(f"{'='*60}")
+        
+        for cluster_id, info in cluster_info.items():
+            print(f"\nCluster {cluster_id}:")
+            print(f"  Size: {info['size']} frequency-channel combinations")
+            print(f"  Minimum p-value: {info['min_p']:.6f}")
+            print(f"  Mean p-value: {info['mean_p']:.6f}")
+            print(f"  Frequency range: {info['freq_range'][0]:.1f} - {info['freq_range'][1]:.1f} Hz")
+            print(f"  Channels involved: {', '.join(info['channels'])}")
+            
+            # Determine frequency band
+            freq_range = info['freq_range']
+            if freq_range[0] >= 0.5 and freq_range[1] <= 4:
+                band = "Delta"
+            elif freq_range[0] >= 4 and freq_range[1] <= 8:
+                band = "Theta"  
+            elif freq_range[0] >= 8 and freq_range[1] <= 12:
+                band = "Alpha"
+            elif freq_range[0] >= 12 and freq_range[1] <= 30:
+                band = "Beta"
+            elif freq_range[0] >= 30:
+                band = "Gamma"
+            else:
+                band = "Mixed"
+            
+            print(f"  Frequency band: {band}")
+            print(f"  {'-'*40}")
+
+def run_complete_psd_analysis(real_data_path, synthetic_data_path, output_dir='statistical_analysis', 
+                            sfreq=200, fmin=1, fmax=30, n_permutations=1000):
+    """
+    Run complete PSD statistical analysis comparing real and synthetic EEG data.
+    
+    Parameters:
+    -----------
+    real_data_path : str
+        Path to real EEG data .npy file
+    synthetic_data_path : str  
+        Path to synthetic EEG data .npy file
+    output_dir : str
+        Directory to save results
+    sfreq : float
+        Sampling frequency
+    fmin, fmax : float
+        Frequency range for analysis
+    n_permutations : int
+        Number of permutations for statistical tests
+    """
+    
+    # Create output directory
+    os.makedirs(output_dir, exist_ok=True)
+    
+    print("Loading real EEG data...")
+    real_data, n_epochs_real, n_channels, n_times = load_and_preprocess_data(real_data_path, sfreq)
+    
+    print("Loading synthetic EEG data...")
+    synthetic_data, n_epochs_synth, _, _ = load_and_preprocess_data(synthetic_data_path, sfreq)
+    
+    # Check data compatibility
+    if real_data.shape[1:] != synthetic_data.shape[1:]:
+        raise ValueError(f"Data shape mismatch: Real {real_data.shape} vs Synthetic {synthetic_data.shape}")
+    
+    # Generate channel names
+    channels = [f"EEG {i+1}" for i in range(n_channels)]
+    
+    print("Calculating PSDs for real data...")
+    real_psds, freqs = calculate_psd_for_statistical_analysis(real_data, sfreq, fmin, fmax)
+    
+    print("Calculating PSDs for synthetic data...")
+    synthetic_psds, _ = calculate_psd_for_statistical_analysis(synthetic_data, sfreq, fmin, fmax)
+    
+    print(f"PSD data shapes: Real {real_psds.shape}, Synthetic {synthetic_psds.shape}")
+    print(f"Frequency range: {freqs[0]:.1f} - {freqs[-1]:.1f} Hz ({len(freqs)} frequencies)")
+    
+    # Run statistical comparison
+    print("Starting statistical comparison...")
+    comparator = PSDStatisticalComparison(n_permutations=n_permutations, alpha=0.05, cluster_alpha=0.01)
+    
+    # Mass-univariate tests
+    p_values, effect_sizes = comparator.mass_univariate_test(real_psds, synthetic_psds, freqs, channels)
+    
+    # Cluster correction
+    significant_clusters, cluster_info = comparator.cluster_correction(p_values, freqs, channels)
+    
+    # Create visualization
+    fig = comparator.plot_statistical_heatmap(
+        p_values, effect_sizes, significant_clusters, freqs, channels, cluster_info
+    )
+    
+    # Save figure
+    fig_path = os.path.join(output_dir, 'statistical_comparison_heatmap.png')
+    fig.savefig(fig_path, dpi=300, bbox_inches='tight')
+    print(f"Saved statistical heatmap to {fig_path}")
+    
+    # Print results
+    comparator.print_cluster_results(cluster_info, freqs)
+    
+    # Create traditional PSD comparison plot
+    print("Creating traditional PSD comparison plot...")
+    fig_psd, ax = plt.subplots(figsize=(12, 8))
+    
+    # Average PSDs across epochs
+    real_psd_avg = np.mean(real_psds, axis=0)
+    synthetic_psd_avg = np.mean(synthetic_psds, axis=0)
+    
+    # Plot average across all channels
+    real_grand_avg = np.mean(real_psd_avg, axis=0)
+    synthetic_grand_avg = np.mean(synthetic_psd_avg, axis=0)
+    
+    ax.semilogy(freqs, real_grand_avg, 'b-', linewidth=2, label='Real EEG', alpha=0.8)
+    ax.semilogy(freqs, synthetic_grand_avg, 'r-', linewidth=2, label='Synthetic EEG', alpha=0.8)
+    
+    # Add shaded regions for significant differences
+    if np.any(significant_clusters):
+        sig_freqs = np.any(significant_clusters, axis=0)
+        for i, is_sig in enumerate(sig_freqs):
+            if is_sig:
+                ax.axvspan(freqs[max(0, i-1)], freqs[min(len(freqs)-1, i+1)], 
+                          alpha=0.2, color='gray', label='Significant difference' if i == np.where(sig_freqs)[0][0] else "")
+    
+    ax.set_xlabel('Frequency (Hz)')
+    ax.set_ylabel('PSD (µV²/Hz)')
+    ax.set_title('Power Spectral Density Comparison\n(Grand average across all channels)')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    
+    psd_comparison_path = os.path.join(output_dir, 'psd_comparison_plot.png')
+    fig_psd.savefig(psd_comparison_path, dpi=300, bbox_inches='tight')
+    print(f"Saved PSD comparison plot to {psd_comparison_path}")
+    
+    # Save results
+    results = {
+        'p_values': p_values,
+        'effect_sizes': effect_sizes,
+        'significant_clusters': significant_clusters,
+        'cluster_info': cluster_info,
+        'freqs': freqs,
+        'channels': channels,
+        'real_psds': real_psds,
+        'synthetic_psds': synthetic_psds
+    }
+    
+    results_path = os.path.join(output_dir, 'statistical_results.npz')
+    np.savez(results_path, **{k: v for k, v in results.items() if not isinstance(v, dict)})
+    print(f"Saved statistical results to {results_path}")
+    
+    plt.show()
+    
+    return results
+
+# Example usage
+if __name__ == "__main__":
+    # Example paths - replace with your actual file paths
+    real_data_path = 'dataset/CAUEEG2/Feature/feature_01.npy'
+    synthetic_data_path = 'dataset/LDM_PSD_Normalized/Feature/feature_01.npy'
+    
+    # Run complete analysis
+    results = run_complete_psd_analysis(
+        real_data_path=real_data_path,
+        synthetic_data_path=synthetic_data_path,
+        output_dir='statistical_analysis_results',
+        sfreq=200,
+        fmin=1,
+        fmax=30,
+        n_permutations=500  # Reduced for faster demo
+    )
+    
+    print("\nAnalysis complete! Check the 'statistical_analysis_results' directory for outputs.")
