@@ -333,8 +333,16 @@ def run_complete_psd_analysis(real_data_path, synthetic_data_path, output_dir='s
     if real_data.shape[1:] != synthetic_data.shape[1:]:
         raise ValueError(f"Data shape mismatch: Real {real_data.shape} vs Synthetic {synthetic_data.shape}")
     
-    # Generate channel names
-    channels = [f"EEG {i+1}" for i in range(n_channels)]
+    # Use standard 10-20 EEG channel names
+    standard_channels = ['FP1', 'F3', 'C3', 'P3', 'O1', 'FP2', 'F4', 'C4', 'P4', 'O2', 
+                        'F7', 'T3', 'T5', 'F8', 'T4', 'T6', 'FZ', 'CZ', 'PZ']
+    
+    if n_channels == len(standard_channels):
+        channels = standard_channels
+    else:
+        print(f"Warning: Expected {len(standard_channels)} channels but found {n_channels}")
+        print("Using generic channel names instead")
+        channels = [f"EEG {i+1}" for i in range(n_channels)]
     
     print("Calculating PSDs for real data...")
     real_psds, freqs = calculate_psd_for_statistical_analysis(real_data, sfreq, fmin, fmax)
@@ -431,7 +439,7 @@ if __name__ == "__main__":
     results = run_complete_psd_analysis(
         real_data_path=real_data_path,
         synthetic_data_path=synthetic_data_path,
-        output_dir='statistical_analysis_results',
+        output_dir='images/statistical_analysis_results',
         sfreq=200,
         fmin=1,
         fmax=30,
