@@ -44,13 +44,49 @@ def parse_args():
     
     return parser.parse_args()
 
-def read_labels(label_path):
+def get_available_feature_files(feature_dir, prefix="feature_"):
+    """
+    Get list of available feature file IDs in the directory.
+    
+    Args:
+        feature_dir: Directory containing feature files
+        prefix: Prefix of feature files (default: "feature_")
+    
+    Returns:
+        Set of available feature IDs
+    """
+    available_ids = set()
+    
+    if not os.path.exists(feature_dir):
+        print(f"Warning: Feature directory does not exist: {feature_dir}")
+        return available_ids
+    
+    for filename in os.listdir(feature_dir):
+        if filename.startswith(prefix) and filename.endswith('.npy'):
+            try:
+                # Extract ID from filename (e.g., "feature_01.npy" -> 1)
+                id_str = filename[len(prefix):-4]  # Remove prefix and .npy
+                feature_id = int(id_str)
+                available_ids.add(feature_id)
+            except ValueError:
+                # Skip files that don't match the expected pattern
+                continue
+    
+    print(f"Found {len(available_ids)} available feature files in {feature_dir}")
+    return available_ids
+
+def read_labels(label_path, feature_dir=None):
     """
     Read label.npy file and parse the samples by category.
+    Optionally filter by available feature files.
+    
+    Args:
+        label_path: Path to label.npy file
+        feature_dir: Optional path to feature directory for validation
     
     Returns:
         Dictionary mapping label (0, 1, 2) to list of feature file numbers
-        Full label array
+        Full label array (potentially filtered)
     """
     print(f"Reading labels from: {label_path}")
     
@@ -58,19 +94,44 @@ def read_labels(label_path):
     labels = np.load(label_path)
     print(f"Loaded label file with shape: {labels.shape}")
     
-    # Group by label
+    # Get available feature files if feature_dir is provided
+    available_features = None
+    if feature_dir:
+        available_features = get_available_feature_files(feature_dir)
+    
+    # Group by label and filter by available files
     label_to_features = defaultdict(list)
+    filtered_labels = []
+    
     for entry in labels:
         label = int(entry[0])  # First column is label
         subject_id = int(entry[1])  # Second column is subject_id
-        label_to_features[label].append(subject_id)
+        
+        # Only include if feature file exists (when validation is enabled)
+        if available_features is None or subject_id in available_features:
+            label_to_features[label].append(subject_id)
+            filtered_labels.append(entry)
+        else:
+            print(f"Warning: Feature file feature_{subject_id:02d}.npy not found, skipping")
+    
+    # Convert back to numpy array
+    filtered_labels = np.array(filtered_labels) if filtered_labels else np.array([])
     
     # Print summary
-    print(f"Found {len(label_to_features[0])} HC samples, " +
-          f"{len(label_to_features[1])} MCI samples, " +
-          f"{len(label_to_features[2])} Dementia samples")
+    if filtered_labels.size > 0:
+        print(f"Found {len(label_to_features[0])} HC samples, " +
+              f"{len(label_to_features[1])} MCI samples, " +
+              f"{len(label_to_features[2])} Dementia samples")
+        
+        if available_features is not None:
+            original_count = len(labels)
+            filtered_count = len(filtered_labels)
+            if original_count != filtered_count:
+                print(f"Filtered from {original_count} to {filtered_count} samples based on available files")
+    else:
+        print("Warning: No valid samples found after filtering")
     
-    return label_to_features, labels
+    return label_to_features, filtered_labels
 
 def copy_features(feature_ids, src_dir, dst_dir, prefix="feature_"):
     """Copy feature files with the given IDs from source to destination."""
@@ -126,9 +187,10 @@ def create_train_test_split(genuine_path, output_dir, test_size=0.2, stratify=Tr
     os.makedirs(test_feature_dir, exist_ok=True)
     os.makedirs(test_label_dir, exist_ok=True)
     
-    # Read genuine labels
+    # Read genuine labels with feature file validation
     genuine_label_path = os.path.join(genuine_path, "Label", "label.npy")
-    genuine_label_dict, genuine_labels = read_labels(genuine_label_path)
+    genuine_feature_dir = os.path.join(genuine_path, "Feature")
+    genuine_label_dict, genuine_labels = read_labels(genuine_label_path, genuine_feature_dir)
     
     # Create arrays for sklearn's train_test_split
     features = []
@@ -167,7 +229,6 @@ def create_train_test_split(genuine_path, output_dir, test_size=0.2, stratify=Tr
     np.save(os.path.join(test_label_dir, "label.npy"), np.array(test_labels))
     
     # Copy feature files
-    genuine_feature_dir = os.path.join(genuine_path, "Feature")
     train_copied = copy_features(features_train, genuine_feature_dir, train_feature_dir)
     test_copied = copy_features(features_test, genuine_feature_dir, test_feature_dir)
     
@@ -216,9 +277,10 @@ def augment_training_set(genuine_train_dict, genuine_train_ids, synthetic_path, 
     os.makedirs(output_feature_dir, exist_ok=True)
     os.makedirs(output_label_dir, exist_ok=True)
     
-    # Read synthetic labels
+    # Read synthetic labels with feature file validation
     synthetic_label_path = os.path.join(synthetic_path, "Label", "label.npy")
-    synthetic_label_dict, synthetic_labels = read_labels(synthetic_label_path)
+    synthetic_feature_dir = os.path.join(synthetic_path, "Feature")
+    synthetic_label_dict, synthetic_labels = read_labels(synthetic_label_path, synthetic_feature_dir)
     
     # Calculate number of samples to add for each category
     samples_to_add = {}
@@ -261,7 +323,7 @@ def augment_training_set(genuine_train_dict, genuine_train_ids, synthetic_path, 
         
         # Randomly select the required number of samples
         num_to_add = samples_to_add[label]
-        if num_to_add > 0:
+        if num_to_add > 0 and len(available_features) > 0:
             selected_features = random.sample(available_features, num_to_add)
             
             print(f"Adding {len(selected_features)} synthetic samples for category {label}")
@@ -271,21 +333,25 @@ def augment_training_set(genuine_train_dict, genuine_train_ids, synthetic_path, 
             for i, feature_id in enumerate(selected_features):
                 # Source synthetic file
                 src_filename = f"feature_{feature_id:02d}.npy"
-                src_path = os.path.join(synthetic_path, "Feature", src_filename)
+                src_path = os.path.join(synthetic_feature_dir, src_filename)
                 
                 # Destination with new ID
                 new_id = next_id + i
                 dst_filename = f"feature_{new_id:02d}.npy"
                 dst_path = os.path.join(output_feature_dir, dst_filename)
                 
-                # Copy file with new ID
-                shutil.copy2(src_path, dst_path)
-                
-                # Add to augmented labels
-                augmented_labels.append([label, new_id])
+                # Double-check that source file exists before copying
+                if os.path.exists(src_path):
+                    shutil.copy2(src_path, dst_path)
+                    # Add to augmented labels
+                    augmented_labels.append([label, new_id])
+                else:
+                    print(f"Error: Source file {src_path} does not exist, skipping")
             
             # Update max_feature_id
             max_feature_id += len(selected_features)
+        elif num_to_add > 0:
+            print(f"Warning: No synthetic samples available for category {label}")
     
     # Save augmented labels
     augmented_labels = np.array(augmented_labels)
