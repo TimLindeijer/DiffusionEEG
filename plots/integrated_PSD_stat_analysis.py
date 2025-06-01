@@ -391,14 +391,6 @@ def run_complete_psd_analysis(real_data_path, synthetic_data_path, output_dir='s
     ax.semilogy(freqs, real_grand_avg, 'b-', linewidth=2, label='Real EEG', alpha=0.8)
     ax.semilogy(freqs, synthetic_grand_avg, 'r-', linewidth=2, label='Synthetic EEG', alpha=0.8)
     
-    # Add shaded regions for significant differences
-    if np.any(significant_clusters):
-        sig_freqs = np.any(significant_clusters, axis=0)
-        for i, is_sig in enumerate(sig_freqs):
-            if is_sig:
-                ax.axvspan(freqs[max(0, i-1)], freqs[min(len(freqs)-1, i+1)], 
-                          alpha=0.2, color='gray', label='Significant difference' if i == np.where(sig_freqs)[0][0] else "")
-    
     ax.set_xlabel('Frequency (Hz)')
     ax.set_ylabel('PSD (µV²/Hz)')
     ax.set_title('Power Spectral Density Comparison\n(Grand average across all channels)')
@@ -433,13 +425,13 @@ def run_complete_psd_analysis(real_data_path, synthetic_data_path, output_dir='s
 if __name__ == "__main__":
     # Example paths - replace with your actual file paths
     real_data_path = 'dataset/CAUEEG2/Feature/feature_01.npy'
-    synthetic_data_path = 'dataset/LDM_PSD_Normalized/Feature/feature_01.npy'
+    synthetic_data_path = 'dataset/discrimination_ftsurrogate/all_augmented_train/Feature/feature_02.npy'
     
     # Run complete analysis
     results = run_complete_psd_analysis(
         real_data_path=real_data_path,
         synthetic_data_path=synthetic_data_path,
-        output_dir='images/statistical_analysis_results',
+        output_dir='statistical_analysis_results',
         sfreq=200,
         fmin=1,
         fmax=30,
