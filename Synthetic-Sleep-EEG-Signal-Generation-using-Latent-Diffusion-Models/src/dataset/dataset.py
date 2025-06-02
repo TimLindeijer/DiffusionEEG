@@ -20,9 +20,6 @@ class FormatEEGDataD(Transform):
                 # Get the EEG data
                 eeg_data = d[key]
                 
-                # Print original shape for debugging
-                # print(f"Original shape: {eeg_data.shape}")
-                
                 # Check the shape and format accordingly
                 if len(eeg_data.shape) == 4 and eeg_data.shape[0] == 1:
                     # If shape is [1, epochs, timepoints, channels]
@@ -31,21 +28,15 @@ class FormatEEGDataD(Transform):
                         eeg_data = eeg_data.reshape(eeg_data.shape[1], eeg_data.shape[2], eeg_data.shape[3])
                         # Convert to [epochs, channels, timepoints]
                         eeg_data = eeg_data.permute(0, 2, 1)
-                        # print(f"Reshaped from [1, epochs, timepoints, channels] to {eeg_data.shape}")
                     # If shape is [1, epochs, channels, timepoints]
                     elif eeg_data.shape[2] == 19:
                         # Reshape to [epochs, channels, timepoints]
                         eeg_data = eeg_data.reshape(eeg_data.shape[1], eeg_data.shape[2], eeg_data.shape[3])
-                        # print(f"Reshaped from [1, epochs, channels, timepoints] to {eeg_data.shape}")
                 elif len(eeg_data.shape) == 3:
                     # If shape is [epochs, timepoints, channels]
                     if eeg_data.shape[2] == 19:
                         # Convert to [epochs, channels, timepoints]
                         eeg_data = eeg_data.permute(0, 2, 1)
-                        # print(f"Permuted from [epochs, timepoints, channels] to {eeg_data.shape}")
-                    # If shape is already [epochs, channels, timepoints], keep as is
-                    # elif eeg_data.shape[1] == 19:
-                    #     print(f"Shape already correct: {eeg_data.shape}")
                 
                 # Ensure the data is in the format [epochs, channels, timepoints]
                 assert len(eeg_data.shape) == 3 and eeg_data.shape[1] == 19, \
@@ -53,11 +44,31 @@ class FormatEEGDataD(Transform):
                 
                 # Update the data
                 d[key] = eeg_data
-                
-                # Print final shape for debugging
-                # print(f"Final shape: {d[key].shape}")
         
         return d
+
+
+class FlattenEpochsD(Transform):
+    """Flatten the epochs dimension to create individual samples"""
+    def __init__(self, keys):
+        self.keys = keys
+        
+    def __call__(self, data):
+        d = dict(data)
+        for key in self.keys:
+            if key in d and key == 'eeg':
+                # Get the EEG data with shape [epochs, channels, timepoints]
+                eeg_data = d[key]
+                
+                # Store the original shape for potential reconstruction
+                d[f'{key}_original_shape'] = eeg_data.shape
+                
+                # For CAUEEG2, we want to treat each epoch as a separate sample
+                # So we'll return a list of epochs that will be handled by the collate function
+                d[key] = eeg_data  # Keep as is, will be handled in collate
+        
+        return d
+
 
 def get_trans(dataset):
     if dataset == "caueeg2":
@@ -70,10 +81,14 @@ def get_trans(dataset):
             
             # Normalize the data
             ScaleIntensityD(factor=1e6, keys='eeg'),  # For numeric stability
-            ScaleIntensityD(minv=0, maxv=1, keys='eeg')  # Normalize to [0,1]
+            ScaleIntensityD(minv=0, maxv=1, keys='eeg'),  # Normalize to [0,1]
+            
+            # Add the flatten transform
+            FlattenEpochsD(keys=['eeg'])
         ])
     else:
         # Original code for other datasets
+        from monai.transforms import RandSpatialCropD
         transforms_list = Compose([
             LoadImageD(keys='eeg'),
             EnsureChannelFirstD(keys='eeg'),
@@ -84,10 +99,46 @@ def get_trans(dataset):
     return transforms_list
 
 
-# Custom collate function to process one patient at a time
-def patient_collate_fn(batch):
-    # Since we are using batch_size=1, the batch will only have one element
-    return batch[0]
+def caueeg2_collate_fn(batch):
+    """Custom collate function for CAUEEG2 that handles multiple patients and flattens epochs"""
+    # batch is a list of dictionaries, one per patient
+    
+    # Collect all epochs from all patients
+    all_epochs = []
+    all_subjects = []
+    all_labels = []
+    
+    for item in batch:
+        eeg_data = item['eeg']  # Shape: [epochs, channels, timepoints]
+        num_epochs = eeg_data.shape[0]
+        
+        # Add each epoch as a separate sample
+        for epoch_idx in range(num_epochs):
+            all_epochs.append(eeg_data[epoch_idx])  # Shape: [channels, timepoints]
+            all_subjects.append(item['subject'])
+            if 'label' in item:
+                all_labels.append(item['label'])
+    
+    # Stack all epochs into a single batch
+    batch_eeg = torch.stack(all_epochs)  # Shape: [batch_size, channels, timepoints]
+    
+    # Create the output dictionary
+    collated = {
+        'eeg': batch_eeg,
+        'subject': torch.tensor(all_subjects),
+    }
+    
+    if all_labels:
+        collated['label'] = torch.tensor(all_labels)
+    
+    return collated
+
+
+def default_collate_fn(batch):
+    """Default collate function for non-CAUEEG2 datasets"""
+    # For other datasets, use the standard PyTorch collate behavior
+    from torch.utils.data.dataloader import default_collate
+    return default_collate(batch)
 
 
 def get_datalist(df: DataFrame, basepath: str, dataset: str):
@@ -246,6 +297,8 @@ def get_caueeg2_datalist(base_path, label_filter=None):
         try:
             sample_data = np.load(data_dicts[0]["eeg"])
             print(f"Sample data shape: {sample_data.shape}")
+            if len(sample_data.shape) >= 3:
+                print(f"Each file contains {sample_data.shape[0]} epochs")
         except Exception as e:
             print(f"Could not load sample file: {e}")
     
@@ -266,26 +319,47 @@ def train_dataloader(config, args, transforms_list, dataset):
         train_size = int(0.8 * len(all_dicts))
         train_dicts = all_dicts[:train_size]
         print(f"Using {len(train_dicts)} files for training")
+        
+        # Use custom collate function for CAUEEG2
+        collate_fn = caueeg2_collate_fn
+        
+        # For CAUEEG2, batch_size refers to number of files to load
+        # Each file contains multiple epochs that will be flattened
+        batch_size = config.train.batch_size if hasattr(config.train, 'batch_size') else 1
+        print(f"Using batch_size={batch_size} files per batch (each file contains multiple epochs)")
     else:
         # Original code for other datasets
         train_df = pd.read_csv(args.path_train_ids)
         train_dicts = get_datalist(train_df, basepath=args.path_pre_processed, dataset=dataset)
+        collate_fn = default_collate_fn
+        batch_size = config.train.batch_size
 
     train_ds = PersistentDataset(data=train_dicts,
                                transform=transforms_list,
                                cache_dir=None)
 
-    # Use batch_size=1 and our custom collate function to process one patient at a time
     train_loader = DataLoader(
         train_ds,
-        batch_size=1,  # Process one patient at a time
+        batch_size=batch_size,  # Now uses config batch_size
         shuffle=True,
         num_workers=config.train.num_workers,
         drop_last=config.train.drop_last,
-        pin_memory=False,
+        pin_memory=torch.cuda.is_available(),
         persistent_workers=True,
-        collate_fn=patient_collate_fn  # Custom collate function
+        collate_fn=collate_fn
     )
+    
+    # Print effective batch size info for CAUEEG2
+    if dataset == "caueeg2" and len(train_dicts) > 0:
+        try:
+            sample_item = train_ds[0]
+            if 'eeg' in sample_item:
+                epochs_per_file = sample_item['eeg'].shape[0]
+                effective_batch_size = batch_size * epochs_per_file
+                print(f"Effective batch size: {batch_size} files × {epochs_per_file} epochs/file = {effective_batch_size} epochs")
+        except:
+            pass
+    
     return train_loader
 
 
@@ -303,50 +377,70 @@ def valid_dataloader(config, args, transforms_list, dataset):
         train_size = int(0.8 * len(all_dicts))
         valid_dicts = all_dicts[train_size:]
         print(f"Using {len(valid_dicts)} files for validation")
+        
+        # Use custom collate function for CAUEEG2
+        collate_fn = caueeg2_collate_fn
+        
+        # For validation, we might want to use a different batch size
+        batch_size = config.train.batch_size if hasattr(config.train, 'batch_size') else 1
     else:
         # Original code for other datasets
         valid_df = pd.read_csv(args.path_valid_ids)
         valid_dicts = get_datalist(valid_df, basepath=args.path_pre_processed, dataset=dataset)
+        collate_fn = default_collate_fn
+        batch_size = config.train.batch_size
 
     valid_ds = PersistentDataset(data=valid_dicts, transform=transforms_list,
                                cache_dir=None)
 
-    # Use batch_size=1 and our custom collate function to process one patient at a time
     valid_loader = DataLoader(
         valid_ds, 
-        batch_size=1,  # Process one patient at a time
-        shuffle=True,
+        batch_size=batch_size,  # Now uses config batch_size
+        shuffle=False,  # Usually don't shuffle validation data
         num_workers=config.train.num_workers, 
-        drop_last=config.train.drop_last,
-        pin_memory=False,
+        drop_last=False,  # Don't drop last batch for validation
+        pin_memory=torch.cuda.is_available(),
         persistent_workers=True,
-        collate_fn=patient_collate_fn  # Custom collate function
+        collate_fn=collate_fn
     )
 
     return valid_loader
 
 
 def test_dataloader(config, args, transforms_list, dataset, upper_limit=None):
-    test_df = pd.read_csv(args.path_test_ids)
-
-    if upper_limit is not None:
-        test_df = test_df[:upper_limit]
-
-    test_dicts = get_datalist(test_df, basepath=args.path_pre_processed, dataset=dataset)
+    if dataset == "caueeg2":
+        # Similar to validation, but for test set
+        label_filter = args.label_filter if hasattr(args, 'label_filter') else None
+        all_dicts = get_caueeg2_datalist(args.path_pre_processed, label_filter)
+        
+        if upper_limit is not None:
+            all_dicts = all_dicts[:upper_limit]
+            
+        test_dicts = all_dicts  # For CAUEEG2, we might not have a separate test set
+        collate_fn = caueeg2_collate_fn
+        batch_size = config.train.batch_size if hasattr(config.train, 'batch_size') else 1
+    else:
+        test_df = pd.read_csv(args.path_test_ids)
+        
+        if upper_limit is not None:
+            test_df = test_df[:upper_limit]
+            
+        test_dicts = get_datalist(test_df, basepath=args.path_pre_processed, dataset=dataset)
+        collate_fn = default_collate_fn
+        batch_size = config.train.batch_size
 
     test_ds = PersistentDataset(data=test_dicts, transform=transforms_list,
                                  cache_dir=None)
 
-    # Use batch_size=1 and our custom collate function to process one patient at a time
     test_loader = DataLoader(
         test_ds, 
-        batch_size=1,  # Process one patient at a time
-        shuffle=True,
+        batch_size=batch_size,  # Now uses config batch_size
+        shuffle=False,  # Don't shuffle test data
         num_workers=config.train.num_workers, 
-        drop_last=config.train.drop_last,
-        pin_memory=False,
+        drop_last=False,  # Don't drop last batch for testing
+        pin_memory=torch.cuda.is_available(),
         persistent_workers=True,
-        collate_fn=patient_collate_fn  # Custom collate function
+        collate_fn=collate_fn
     )
 
     return test_loader
