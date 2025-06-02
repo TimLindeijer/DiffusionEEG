@@ -3,6 +3,7 @@
 Optimized script to generate synthetic EEG data with the same structure as the original dataset.
 This version includes significant performance optimizations, proper PSD scaling, and clear progress tracking.
 Fix for reference data with varying epochs per subject.
+Modified to only generate synthetic data for existing feature files.
 """
 
 import os
@@ -106,7 +107,7 @@ def parse_args():
                       help="Plot and save PSD comparisons during generation")
     parser.add_argument("--reference_sample_count", type=int, default=5,
                       help="Number of real samples to use as reference for PSD matching")
-    parser.add_argument("--sampling_rate", type=int, default=250,
+    parser.add_argument("--sampling_rate", type=int, default=200,
                       help="EEG sampling rate in Hz")
     
     args = parser.parse_args()
@@ -146,30 +147,56 @@ def ensure_correct_data_format(data, expected_channels=19, expected_timepoints=1
         print(f"Warning: Expected 3D array but got {data.ndim}D array with shape {data.shape}")
         return data
 
-def read_original_labels(label_path):
+def read_original_labels(label_path, data_path):
     """
     Read the original label.npy file to extract feature numbering and labels.
+    Only include feature IDs that have corresponding feature files.
+    
+    Args:
+        label_path: Path to the label.npy file
+        data_path: Path to the feature directory
     
     Returns:
-        Dictionary mapping label (0, 1, 2) to list of feature file numbers
+        Dictionary mapping label (0, 1, 2) to list of feature file numbers that exist
     """
     print(f"Reading original labels from: {label_path}")
+    print(f"Checking for existing feature files in: {data_path}")
+    
     try:
         # Load the original labels
         labels = np.load(label_path)
         print(f"Successfully loaded original label file with shape: {labels.shape}")
         
-        # Group by label
+        # Group by label and check file existence
         label_to_features = defaultdict(list)
+        missing_files = []
+        
         for entry in labels:
             label = int(entry[0])  # First column is label
             subject_id = int(entry[1])  # Second column is subject_id
-            label_to_features[label].append(subject_id)
+            
+            # Check if the feature file exists
+            feature_filename = f"feature_{subject_id:02d}.npy"
+            feature_path = os.path.join(data_path, feature_filename)
+            
+            if os.path.exists(feature_path):
+                label_to_features[label].append(subject_id)
+            else:
+                missing_files.append((label, subject_id, feature_path))
         
         # Print summary
-        print(f"Found {len(label_to_features[0])} HC samples, " +
-              f"{len(label_to_features[1])} MCI samples, " +
-              f"{len(label_to_features[2])} Dementia samples")
+        print(f"\nExisting files summary:")
+        print(f"  HC (label 0): {len(label_to_features[0])} files exist")
+        print(f"  MCI (label 1): {len(label_to_features[1])} files exist")
+        print(f"  Dementia (label 2): {len(label_to_features[2])} files exist")
+        
+        if missing_files:
+            print(f"\nSkipping {len(missing_files)} missing files:")
+            for label, subject_id, path in missing_files[:10]:  # Show first 10
+                label_name = ['HC', 'MCI', 'Dementia'][label]
+                print(f"  - {label_name} (label {label}): feature_{subject_id:02d}.npy")
+            if len(missing_files) > 10:
+                print(f"  ... and {len(missing_files) - 10} more")
         
         return label_to_features
     except Exception as e:
@@ -808,9 +835,9 @@ def main():
     print(f"Creating output directory: {args.output_dir}")
     os.makedirs(args.output_dir, exist_ok=True)
     
-    # Read original labels to get structure
-    print("Reading original labels...")
-    label_to_features = read_original_labels(args.original_label_path)
+    # Read original labels to get structure (only includes existing files)
+    print("Reading original labels and checking for existing files...")
+    label_to_features = read_original_labels(args.original_label_path, args.original_data_path)
     
     # Save labels file immediately (it's the same regardless of which samples we generate)
     print("Saving labels file...")
