@@ -299,31 +299,68 @@ Mean: {np.mean(effect_sizes):.4f}
             print(f"  Frequency band: {band}")
             print(f"  {'-'*40}")
 
-def get_patient_samples_by_condition(dataset_folder, conditions=['HC', 'MCI', 'Dementia']):
+def load_labels_with_subject_ids(dataset_folder):
     """
-    Get the first patient sample for each specified condition from the dataset.
+    Load labels and extract both condition labels and subject IDs.
     
     Parameters:
     -----------
     dataset_folder : str
         Path to dataset folder (e.g., 'dataset/CAUEEG2')
-    conditions : list
-        List of conditions to find (default: ['HC', 'MCI', 'Dementia'])
         
     Returns:
     --------
-    selected_samples : dict
-        Dictionary with condition names as keys and file paths as values
+    labels_array : array, shape (n_samples, 2) 
+        Array where first column is condition label, second column is subject ID
+    condition_labels : array
+        Condition labels only
+    subject_ids : array
+        Subject IDs only
     """
-    
-    # Load labels
     label_path = os.path.join(dataset_folder, 'Label', 'label.npy')
     if not os.path.exists(label_path):
         raise FileNotFoundError(f"Label file not found: {label_path}")
     
-    labels = np.load(label_path)
-    print(f"Loaded labels shape: {labels.shape}")
-    print(f"Unique labels: {np.unique(labels)}")
+    labels_array = np.load(label_path)
+    print(f"Loaded labels shape: {labels_array.shape}")
+    
+    # Extract condition labels and subject IDs
+    if labels_array.ndim == 2 and labels_array.shape[1] == 2:
+        condition_labels = labels_array[:, 0]
+        subject_ids = labels_array[:, 1]
+    elif labels_array.ndim == 1:
+        # If only one column, assume these are condition labels and generate subject IDs
+        condition_labels = labels_array
+        subject_ids = np.arange(1, len(labels_array) + 1)
+        print("Warning: Only condition labels found, generating sequential subject IDs")
+    else:
+        raise ValueError(f"Unexpected label array shape: {labels_array.shape}")
+    
+    print(f"Unique condition labels: {np.unique(condition_labels)}")
+    print(f"Subject ID range: {np.min(subject_ids)} to {np.max(subject_ids)}")
+    
+    return labels_array, condition_labels, subject_ids
+
+def find_matching_subjects_by_condition(real_dataset_folder, synthetic_dataset_folder, 
+                                       conditions=['HC', 'MCI', 'Dementia']):
+    """
+    Find matching subjects between real and synthetic datasets for each condition.
+    
+    Parameters:
+    -----------
+    real_dataset_folder : str
+        Path to real EEG dataset folder
+    synthetic_dataset_folder : str  
+        Path to synthetic EEG dataset folder
+    conditions : list
+        List of conditions to find matches for
+        
+    Returns:
+    --------
+    matched_samples : dict
+        Dictionary with condition names as keys and dictionaries as values.
+        Each sub-dictionary contains 'real_path', 'synthetic_path', 'subject_id'
+    """
     
     # Map label values to condition names (adjust these mappings as needed)
     label_mapping = {
@@ -332,9 +369,17 @@ def get_patient_samples_by_condition(dataset_folder, conditions=['HC', 'MCI', 'D
         2: 'Dementia'   # Dementia
     }
     
-    selected_samples = {}
+    print("Loading real dataset labels...")
+    real_labels_array, real_condition_labels, real_subject_ids = load_labels_with_subject_ids(real_dataset_folder)
+    
+    print("Loading synthetic dataset labels...")
+    synth_labels_array, synth_condition_labels, synth_subject_ids = load_labels_with_subject_ids(synthetic_dataset_folder)
+    
+    matched_samples = {}
     
     for condition in conditions:
+        print(f"\nFinding matches for condition: {condition}")
+        
         # Find the label value for this condition
         label_value = None
         for val, cond in label_mapping.items():
@@ -345,31 +390,73 @@ def get_patient_samples_by_condition(dataset_folder, conditions=['HC', 'MCI', 'D
         if label_value is None:
             print(f"Warning: Condition '{condition}' not found in label mapping")
             continue
-            
-        # Find indices where this condition occurs
-        condition_indices = np.where(labels == label_value)[0]
         
-        if len(condition_indices) == 0:
-            print(f"Warning: No samples found for condition '{condition}' (label {label_value})")
+        # Find subjects with this condition in real dataset
+        real_condition_mask = real_condition_labels == label_value
+        real_subjects_with_condition = real_subject_ids[real_condition_mask]
+        real_indices_with_condition = np.where(real_condition_mask)[0]
+        
+        # Find subjects with this condition in synthetic dataset  
+        synth_condition_mask = synth_condition_labels == label_value
+        synth_subjects_with_condition = synth_subject_ids[synth_condition_mask]
+        synth_indices_with_condition = np.where(synth_condition_mask)[0]
+        
+        print(f"Real dataset: {len(real_subjects_with_condition)} subjects with {condition}")
+        print(f"Synthetic dataset: {len(synth_subjects_with_condition)} subjects with {condition}")
+        
+        # Find common subject IDs
+        common_subject_ids = np.intersect1d(real_subjects_with_condition, synth_subjects_with_condition)
+        
+        if len(common_subject_ids) == 0:
+            print(f"Warning: No matching subject IDs found for condition '{condition}'")
+            continue
+        
+        print(f"Found {len(common_subject_ids)} matching subjects: {common_subject_ids}")
+        
+        # Select the first matching subject (you can modify this to select differently)
+        selected_subject_id = common_subject_ids[0]
+        
+        # Find the indices for this subject in both datasets
+        real_idx = np.where((real_condition_labels == label_value) & 
+                           (real_subject_ids == selected_subject_id))[0][0]
+        synth_idx = np.where((synth_condition_labels == label_value) & 
+                            (synth_subject_ids == selected_subject_id))[0][0]
+        
+        # Generate file paths
+        real_feature_file = f"feature_{real_idx+1:02d}.npy"  # 1-indexed filenames
+        real_feature_path = os.path.join(real_dataset_folder, 'Feature', real_feature_file)
+        
+        synth_feature_file = f"feature_{synth_idx+1:02d}.npy"  # 1-indexed filenames
+        synth_feature_path = os.path.join(synthetic_dataset_folder, 'Feature', synth_feature_file)
+        
+        # Verify files exist
+        if not os.path.exists(real_feature_path):
+            print(f"Warning: Real feature file not found: {real_feature_path}")
             continue
             
-        # Get the first sample for this condition
-        first_sample_idx = condition_indices[0]
-        feature_file = f"feature_{first_sample_idx+1:02d}.npy"  # 1-indexed filenames
-        feature_path = os.path.join(dataset_folder, 'Feature', feature_file)
+        if not os.path.exists(synth_feature_path):
+            print(f"Warning: Synthetic feature file not found: {synth_feature_path}")
+            continue
         
-        if os.path.exists(feature_path):
-            selected_samples[condition] = feature_path
-            print(f"Selected {condition}: {feature_file} (index {first_sample_idx}, label {label_value})")
-        else:
-            print(f"Warning: Feature file not found: {feature_path}")
+        matched_samples[condition] = {
+            'real_path': real_feature_path,
+            'synthetic_path': synth_feature_path,
+            'subject_id': selected_subject_id,
+            'real_index': real_idx,
+            'synthetic_index': synth_idx
+        }
+        
+        print(f"Selected subject {selected_subject_id} for {condition}:")
+        print(f"  Real: {real_feature_file} (index {real_idx}, label {real_labels_array[real_idx]})")
+        print(f"  Synthetic: {synth_feature_file} (index {synth_idx}, label {synth_labels_array[synth_idx]})")
     
-    return selected_samples
+    return matched_samples
 
 def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, output_dir='statistical_analysis', 
                             conditions=['HC', 'MCI', 'Dementia'], sfreq=200, fmin=1, fmax=30, n_permutations=1000):
     """
     Run complete PSD statistical analysis comparing real and synthetic EEG data for multiple conditions.
+    Now matches subjects by subject ID instead of index position.
     
     Parameters:
     -----------
@@ -393,36 +480,34 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
     os.makedirs(output_dir, exist_ok=True)
     
     print("="*60)
-    print("SELECTING PATIENT SAMPLES BY CONDITION")
+    print("FINDING MATCHING SUBJECTS BY CONDITION AND SUBJECT ID")
     print("="*60)
     
-    # Get patient samples for each condition from both datasets
-    print("\nReal dataset:")
-    real_samples = get_patient_samples_by_condition(real_dataset_folder, conditions)
+    # Find matching subjects between datasets
+    matched_samples = find_matching_subjects_by_condition(
+        real_dataset_folder, synthetic_dataset_folder, conditions
+    )
     
-    print("\nSynthetic dataset:")
-    synthetic_samples = get_patient_samples_by_condition(synthetic_dataset_folder, conditions)
+    if not matched_samples:
+        raise ValueError("No matching subjects found between real and synthetic datasets")
     
-    # Check that we have samples for each condition in both datasets
-    common_conditions = set(real_samples.keys()) & set(synthetic_samples.keys())
-    if not common_conditions:
-        raise ValueError("No common conditions found between real and synthetic datasets")
-    
-    print(f"\nAnalyzing conditions: {list(common_conditions)}")
+    print(f"\nAnalyzing {len(matched_samples)} conditions with matching subjects")
     
     all_results = {}
     
     # Process each condition
-    for condition in common_conditions:
+    for condition, sample_info in matched_samples.items():
         print(f"\n{'='*60}")
         print(f"PROCESSING CONDITION: {condition}")
+        print(f"SUBJECT ID: {sample_info['subject_id']}")
         print(f"{'='*60}")
         
-        real_data_path = real_samples[condition]
-        synthetic_data_path = synthetic_samples[condition]
+        real_data_path = sample_info['real_path']
+        synthetic_data_path = sample_info['synthetic_path']
         
         print(f"Real data: {real_data_path}")
         print(f"Synthetic data: {synthetic_data_path}")
+        print(f"Matching subject ID: {sample_info['subject_id']}")
         
         # Load and preprocess data
         print("Loading real EEG data...")
@@ -473,15 +558,16 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
         fig = comparator.plot_statistical_heatmap(
             p_values, effect_sizes, significant_clusters, freqs, channels, cluster_info
         )
-        fig.suptitle(f'Statistical Comparison: Real vs Synthetic EEG PSDs - {condition}', fontsize=16, fontweight='bold')
+        fig.suptitle(f'Statistical Comparison: Real vs Synthetic EEG PSDs - {condition}\nSubject ID: {sample_info["subject_id"]}', 
+                    fontsize=16, fontweight='bold')
         
         # Save figure
-        fig_path = os.path.join(condition_output_dir, f'statistical_comparison_heatmap_{condition}.png')
+        fig_path = os.path.join(condition_output_dir, f'statistical_comparison_heatmap_{condition}_subject_{sample_info["subject_id"]}.png')
         fig.savefig(fig_path, dpi=300, bbox_inches='tight')
         print(f"Saved statistical heatmap to {fig_path}")
         
         # Print results
-        print(f"\n{condition} CLUSTER RESULTS:")
+        print(f"\n{condition} CLUSTER RESULTS (Subject {sample_info['subject_id']}):")
         comparator.print_cluster_results(cluster_info, freqs)
         
         # Create traditional PSD comparison plot
@@ -501,11 +587,11 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
         
         ax.set_xlabel('Frequency (Hz)')
         ax.set_ylabel('PSD (µV²/Hz)')
-        ax.set_title(f'Power Spectral Density Comparison - {condition}\n(Grand average across all channels)')
+        ax.set_title(f'Power Spectral Density Comparison - {condition}\nSubject ID: {sample_info["subject_id"]} (Grand average across all channels)')
         ax.legend()
         ax.grid(True, alpha=0.3)
         
-        psd_comparison_path = os.path.join(condition_output_dir, f'psd_comparison_plot_{condition}.png')
+        psd_comparison_path = os.path.join(condition_output_dir, f'psd_comparison_plot_{condition}_subject_{sample_info["subject_id"]}.png')
         fig_psd.savefig(psd_comparison_path, dpi=300, bbox_inches='tight')
         print(f"Saved PSD comparison plot to {psd_comparison_path}")
         
@@ -519,10 +605,12 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
             'channels': channels,
             'real_psds': real_psds,
             'synthetic_psds': synthetic_psds,
-            'condition': condition
+            'condition': condition,
+            'subject_id': sample_info['subject_id'],
+            'sample_info': sample_info
         }
         
-        results_path = os.path.join(condition_output_dir, f'statistical_results_{condition}.npz')
+        results_path = os.path.join(condition_output_dir, f'statistical_results_{condition}_subject_{sample_info["subject_id"]}.npz')
         np.savez(results_path, **{k: v for k, v in results.items() if not isinstance(v, dict)})
         print(f"Saved statistical results to {results_path}")
         
@@ -554,13 +642,14 @@ def create_summary_comparison(all_results, output_dir):
     if len(all_results) == 1:
         axes = axes.reshape(1, -1)
     
-    fig.suptitle('Summary: PSD Comparisons Across Conditions', fontsize=16, fontweight='bold')
+    fig.suptitle('Summary: PSD Comparisons Across Conditions (Matched Subjects)', fontsize=16, fontweight='bold')
     
     for idx, (condition, results) in enumerate(all_results.items()):
         freqs = results['freqs']
         real_psds = results['real_psds']
         synthetic_psds = results['synthetic_psds']
         significant_clusters = results['significant_clusters']
+        subject_id = results['subject_id']
         
         # PSD comparison
         ax1 = axes[idx, 0]
@@ -571,7 +660,7 @@ def create_summary_comparison(all_results, output_dir):
         ax1.semilogy(freqs, synthetic_psd_avg, 'r-', linewidth=2, label='Synthetic EEG', alpha=0.8)
         ax1.set_xlabel('Frequency (Hz)')
         ax1.set_ylabel('PSD (µV²/Hz)')
-        ax1.set_title(f'{condition} - PSD Comparison')
+        ax1.set_title(f'{condition} - Subject {subject_id}')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
         
@@ -601,7 +690,7 @@ def create_summary_comparison(all_results, output_dir):
     
     plt.tight_layout()
     
-    summary_path = os.path.join(output_dir, 'summary_comparison_all_conditions.png')
+    summary_path = os.path.join(output_dir, 'summary_comparison_matched_subjects.png')
     fig.savefig(summary_path, dpi=300, bbox_inches='tight')
     print(f"Saved summary comparison to {summary_path}")
     
@@ -611,14 +700,14 @@ def create_summary_comparison(all_results, output_dir):
 if __name__ == "__main__":
     # Example paths - replace with your actual file paths
     real_data_path = 'dataset/CAUEEG2'
-    synthetic_data_path = 'dataset/LDM_PSD_Normalized'
+    synthetic_data_path = 'dataset/LDM_PSD_Normalized_FIX_NO_SPEC'
     
     # Run complete analysis
     results = run_complete_psd_analysis(
         real_dataset_folder=real_data_path,
         synthetic_dataset_folder=synthetic_data_path,
         conditions=['HC', 'MCI', 'Dementia'],
-        output_dir='images/statistical_analysis_by_condition_LDM_PSD_Normalized'
+        output_dir='images/statistical_analysis_matched_subjects_LDM_PSD_Normalized_FIX_NO_SPEC'
     )
     
-    print("\nAnalysis complete! Check the 'statistical_analysis_results' directory for outputs.")
+    print("\nAnalysis complete! Check the output directory for results.")
