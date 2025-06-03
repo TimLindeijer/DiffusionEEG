@@ -2,8 +2,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=24:00:00
-#SBATCH --job-name=mlr-genuine
-#SBATCH --output=outputs/mlr_genuine_%j.out
+#SBATCH --job-name=gen_classification
+#SBATCH --output=outputs/gen_class_%j.out
 
 # Activate environment (adjust based on your system)
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
@@ -14,10 +14,10 @@ conda activate green-env
 # pip install lightning
 
 # Set paths
-DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ml_ready_datasets/train_genuine"
-TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ml_ready_datasets/test_genuine"
-OUTPUT_DIR="results/ldm_mixed_classification"
-RUN_NAME="MLR_GENUINE_NORMALIZE_FALSE_$(date +%Y%m%d_%H%M%S)"
+DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_ready_datasets/train_genuine"
+TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_ready_datasets/test_genuine"
+OUTPUT_DIR="results/gen_split_fix_classification"
+RUN_NAME="GENUINE_SPLIT_FIX_$(date +%Y%m%d_%H%M%S)"
 
 # W&B Authentication - using API key from file
 export WANDB_API_KEY=$(cat ~/.wandb_key)
@@ -50,7 +50,7 @@ python neuro-green/train_green_model.py \
     --use_wandb \
     --wandb_project "green-diff" \
     --wandb_name "$RUN_NAME" \
-    --wandb_tags "caueeg2" "genuine"
+    --wandb_tags "caueeg2" "genuine" "split" "fixed"
 
 # Save information about the completed job
 echo "Job completed at $(date)"

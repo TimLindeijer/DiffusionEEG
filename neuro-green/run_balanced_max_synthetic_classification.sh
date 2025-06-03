@@ -14,10 +14,10 @@ conda activate green-env
 # pip install lightning
 
 # Set paths
-DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_balanced_datasets_max/train_balanced"
-TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_balanced_datasets_max/test_genuine"
-OUTPUT_DIR="results/ldm_balanced_classification"
-RUN_NAME="LDM_BALANCED_NORMALIZE_$(date +%Y%m%d_%H%M%S)"
+DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_balanced_datasets/train_balanced"
+TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_balanced_datasets/test_genuine"
+OUTPUT_DIR="results/ldm_norm_fix_balanced_classification"
+RUN_NAME="LDM_BALANCED_NORMALIZE_FIX_$(date +%Y%m%d_%H%M%S)"
 
 # W&B Authentication - using API key from file
 export WANDB_API_KEY=$(cat ~/.wandb_key)

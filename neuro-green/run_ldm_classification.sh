@@ -14,9 +14,9 @@ conda activate green-env
 # pip install lightning
 
 # Set paths
-DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_CAUEEG2"
-OUTPUT_DIR="results/ldm_fixed_classification"
-RUN_NAME="LDM_FIXED_$(date +%Y%m%d_%H%M%S)"
+DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized_FIX"
+OUTPUT_DIR="results/LDM_PSD_Norm_fixed_classification_normal_$(date +%Y%m%d_%H%M%S)"
+RUN_NAME="LDM_NORM_FIXED_$(date +%Y%m%d_%H%M%S)"
 
 # W&B Authentication - using API key from file
 export WANDB_API_KEY=$(cat ~/.wandb_key)
@@ -43,8 +43,6 @@ python neuro-green/train_green_model.py \
     --num_workers 4 \
     --detailed_evaluation \
     --sfreq 200 \
-    --test_fraction 0.2 \
-    --n_folds 1 \
     --seed 42 \
     --use_wandb \
     --wandb_project "green-diff" \

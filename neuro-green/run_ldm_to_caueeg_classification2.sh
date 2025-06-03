@@ -2,35 +2,34 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=24:00:00
-#SBATCH --job-name=discrim
-#SBATCH --output=outputs/discrimination_%j.out
+#SBATCH --job-name=GREEN-LDM-CAUEEG2-Transfer
+#SBATCH --output=outputs/GREEN_LDM_CAUEEG2_Transfer_%j.out
 
 # Activate environment (adjust based on your system)
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
 uenv miniconda3-py38
 conda activate green-env
+# pip install wandb
+# pip install geotorch
+# pip install lightning
 
-# Set paths - change these to your specific discrimination dataset paths
-DISCRIMINATION_TYPE="all"  # Options: hc, mci, dementia, all
-
-# Build paths based on discrimination type
-DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/discrimination_datasets/${DISCRIMINATION_TYPE}_train"
-TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/discrimination_datasets/${DISCRIMINATION_TYPE}_val"
-OUTPUT_DIR="results/discrimination_${DISCRIMINATION_TYPE}"
-RUN_NAME="Discrimination_${DISCRIMINATION_TYPE}_$(date +%Y%m%d_%H%M%S)"
+# Set paths
+DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized_FIX"
+TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_ready_datasets/test_genuine"
+OUTPUT_DIR="results/LDM_PSD_Norm_fixed_classification"
+RUN_NAME="LDM_Norm_FIX_to_CAUEEG_$(date +%Y%m%d_%H%M%S)"
 
 # W&B Authentication - using API key from file
 export WANDB_API_KEY=$(cat ~/.wandb_key)
 
 # Print information about the run
-echo "Starting GREEN training for genuine vs synthetic discrimination task: ${DISCRIMINATION_TYPE}"
+echo "Starting GREEN training on LDM dataset with fixed subject-level evaluation"
 echo "Run name: $RUN_NAME"
-echo "Train data directory: $DATA_DIR"
-echo "Test data directory: $TEST_DATA_DIR"
+echo "Data directory: $DATA_DIR"
 echo "Output directory: $OUTPUT_DIR"
 echo "W&B enabled: Yes"
 
-# Run the training script
+# Run the FIXED training script
 python neuro-green/train_green_model.py \
     --data_dir $DATA_DIR \
     --output_dir $OUTPUT_DIR \
@@ -49,9 +48,9 @@ python neuro-green/train_green_model.py \
     --sfreq 200 \
     --seed 42 \
     --use_wandb \
-    --wandb_project "green-discrimination" \
+    --wandb_project "green-diff" \
     --wandb_name "$RUN_NAME" \
-    --wandb_tags "discrimination" "${DISCRIMINATION_TYPE}"
+    --wandb_tags "synthetic" "caueeg2" "transfer_learning" "reverse_transfer" "ldm"
 
 # Save information about the completed job
 echo "Job completed at $(date)"
