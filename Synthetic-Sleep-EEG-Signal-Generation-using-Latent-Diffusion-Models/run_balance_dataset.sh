@@ -1,6 +1,5 @@
 #!/bin/bash
-#SBATCH --gres=gpu:1
-#SBATCH --partition=gpu
+#SBATCH --partition=cpu36
 #SBATCH --time=48:00:00
 #SBATCH --job-name=balance_dataset
 #SBATCH --output=outputs/balance_dataset_caueeg2.out
@@ -19,8 +18,8 @@ cd Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models
 # Can balance to max, mean or to a specific number
 python src/dataset_creation/balance_dataset.py \
   --genuine_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
-  --synthetic_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized \
-  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_balanced_datasets \
+  --synthetic_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized_FIX \
+  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_balanced_datasets \
   --test_size 0.2 \
   --stratify \
   --balance_to max

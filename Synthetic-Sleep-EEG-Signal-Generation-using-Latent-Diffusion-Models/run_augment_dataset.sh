@@ -1,6 +1,5 @@
 #!/bin/bash
-#SBATCH --gres=gpu:1
-#SBATCH --partition=gpu
+#SBATCH --partition=cpu36
 #SBATCH --time=48:00:00
 #SBATCH --job-name=augment_dataset
 #SBATCH --output=outputs/augment_dataset_caueeg2.out
@@ -18,8 +17,8 @@ cd Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models
 
 python src/dataset_creation/augment_dataset.py \
   --genuine_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
-  --synthetic_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized \
-  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_ready_datasets \
+  --synthetic_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized_FIX \
+  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_ready_datasets \
   --test_size 0.2 \
   --stratify \
   --percentages 20,40,60,80,100

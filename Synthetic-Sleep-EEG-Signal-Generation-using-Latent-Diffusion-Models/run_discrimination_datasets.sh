@@ -1,6 +1,5 @@
 #!/bin/bash
-#SBATCH --gres=gpu:1
-#SBATCH --partition=gpu
+#SBATCH --partition=cpu36
 #SBATCH --time=48:00:00
 #SBATCH --job-name=discriminate_dataset
 #SBATCH --output=outputs/discriminate_dataset_caueeg2.out
@@ -19,7 +18,7 @@ cd Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models
   
 python src/dataset_creation/discrimination_datasets.py \
   --genuine_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
-  --comparison_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized \
+  --comparison_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized_FIX \
   --comparison_type synthetic \
-  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/discrimination_synthetic \
+  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_discrimination_synthetic \
   --val_size 0.2
