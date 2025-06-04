@@ -21,8 +21,8 @@ uenv miniconda3-py38
 conda activate green-env
 
 # Build paths based on discrimination type
-DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_discrimination_synthetic/${DISCRIMINATION_TYPE}_train"
-TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_discrimination_synthetic/${DISCRIMINATION_TYPE}_val"
+DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_discrimination/${DISCRIMINATION_TYPE}_train"
+TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_discrimination/${DISCRIMINATION_TYPE}_val"
 OUTPUT_DIR="results/ldm_norm_fix_discrimination_${DISCRIMINATION_TYPE}"
 RUN_NAME="LDM_Norm_FIX_Discrimination_${DISCRIMINATION_TYPE}_$(date +%Y%m%d_%H%M%S)"
 
