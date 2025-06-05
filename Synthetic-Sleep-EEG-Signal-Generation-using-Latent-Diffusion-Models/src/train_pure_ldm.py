@@ -1,36 +1,32 @@
 """
-Author: Bruno Aristimunha (Modified)
-Training LDM with CAUEEG2 data, processing batches of patients while keeping each patient separate.
+Author: Bruno Aristimunha
+Training LDM with SleepEDFx, SHHS, or CAUEEG2 data.
 Based on the tutorial from Monai Generative.
+
 """
 import argparse
 import os
 import torch
 import torch.nn as nn
 
+from generative.networks.nets import DiffusionModelUNet
 from generative.networks.schedulers import DDPMScheduler
 from monai.config import print_config
-from monai.utils import set_determinism
+from monai.utils import first, set_determinism
 from omegaconf import OmegaConf
-from torch.cuda.amp import GradScaler, autocast
+from torch.cuda.amp import autocast
 from torch.utils.tensorboard import SummaryWriter
 from generative.inferers import DiffusionInferer
 
-# Import from local modules
-from dataset.dataset import get_trans, get_caueeg2_datalist
-from models.ldm import UNetModel  # Your original UNet model
-from patient_diffusion_wrapper import (
-    BatchedPatientDiffusionWrapper, 
-    collate_patients_fn, 
-    train_diffusion_batched_patients
-)
+
+from dataset.dataset import train_dataloader, valid_dataloader, get_trans
+from models.ldm import UNetModel
+from training.training_diffusion import train_diffusion_
 from util import log_mlflow, ParseListAction, setup_run_dir
+from generative.networks.nets import DiffusionModelUNet
+# print_config()
+# for reproducibility purposes set a seed
 
-# Custom DataLoader that uses our custom collate function
-from torch.utils.data import DataLoader
-from monai.data import PersistentDataset
-
-# Set determinism for reproducibility
 set_determinism(42)
 
 if os.path.exists('/project'):
@@ -70,7 +66,9 @@ def parse_args():
     parser.add_argument(
         "--path_pre_processed",
         type=str,
+        #default="/home/bru/PycharmProjects/DDPM-EEG/data/data_test",
         default="/data/physionet-sleep-data-npy",
+        help="Path to preprocessed data. For CAUEEG2, this should be the base directory containing Feature/ and Label/ folders"
     )
         
     parser.add_argument(
@@ -82,104 +80,43 @@ def parse_args():
         "--dataset",
         type=str,
         choices=["edfx", "shhs", "shhsh", "caueeg2"],
-        default="caueeg2",
         help="Dataset to use for training"
     )
-    
-    # Add label filter parameter for CAUEEG2 dataset
+
+    # Add label filter argument for CAUEEG2
     parser.add_argument(
         "--label_filter",
         type=str,
-        help="Filter to include only specific labels: 'hc'/'0' (Healthy Controls), 'mci'/'1' (MCI), or 'dementia'/'2' (Dementia). Can use comma-separated values."
-    )
-    
-    # Add batch size parameter
-    parser.add_argument(
-        "--batch_size",
-        type=int,
-        default=4,
-        help="Number of patients to process in parallel"
+        nargs='*',
+        default=None,
+        help="Filter CAUEEG2 dataset by labels. Options: 'hc'/'healthy' (0), 'mci' (1), 'dementia' (2), or numeric values. Can specify multiple: --label_filter hc mci"
     )
 
     args = parser.parse_args()
     
-    # Process label_filter if provided
-    if args.label_filter and ',' in args.label_filter:
-        args.label_filter = args.label_filter.split(',')
+    # Process label_filter for CAUEEG2
+    if args.dataset == "caueeg2" and args.label_filter is not None:
+        processed_filters = []
+        for filt in args.label_filter:
+            if filt.lower() in ['hc', 'healthy', 'healthy_controls']:
+                processed_filters.append(0)
+            elif filt.lower() == 'mci':
+                processed_filters.append(1)
+            elif filt.lower() == 'dementia':
+                processed_filters.append(2)
+            else:
+                try:
+                    processed_filters.append(int(filt))
+                except ValueError:
+                    print(f"Warning: Unrecognized label filter '{filt}'. Skipping.")
+        args.label_filter = processed_filters if processed_filters else None
+        
+        if args.label_filter:
+            label_names = {0: 'Healthy', 1: 'MCI', 2: 'Dementia'}
+            selected_labels = [label_names.get(l, f'Unknown-{l}') for l in args.label_filter]
+            print(f"Using label filter: {selected_labels}")
     
     return args
-
-
-def create_dataloaders(config, args, transforms_list):
-    """
-    Create train and validation dataloaders with our custom collate function.
-    
-    Args:
-        config: Configuration object
-        args: Command line arguments
-        transforms_list: Transforms to apply to data
-        
-    Returns:
-        train_loader, val_loader
-    """
-    # Get label filter
-    label_filter = args.label_filter if hasattr(args, 'label_filter') else None
-    
-    # Get all data dictionaries
-    all_dicts = get_caueeg2_datalist(args.path_pre_processed, label_filter)
-    
-    # Handle empty dataset case
-    if not all_dicts:
-        raise ValueError("Dataset is empty after applying label filter. Check available labels.")
-        
-    # Split into train and validation
-    train_size = int(0.8 * len(all_dicts))
-    train_dicts = all_dicts[:train_size]
-    valid_dicts = all_dicts[train_size:]
-    
-    print(f"Using {len(train_dicts)} patients for training")
-    print(f"Using {len(valid_dicts)} patients for validation")
-    
-    # Create datasets
-    train_ds = PersistentDataset(
-        data=train_dicts,
-        transform=transforms_list,
-        cache_dir=None
-    )
-    
-    valid_ds = PersistentDataset(
-        data=valid_dicts,
-        transform=transforms_list,
-        cache_dir=None
-    )
-    
-    # Batch size for patient batching
-    batch_size = args.batch_size
-    
-    # Create dataloaders with custom collate function
-    train_loader = DataLoader(
-        train_ds,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=config.train.num_workers,
-        drop_last=config.train.drop_last,
-        pin_memory=False,
-        persistent_workers=True,
-        collate_fn=collate_patients_fn  # Use our custom collate function
-    )
-    
-    valid_loader = DataLoader(
-        valid_ds,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=config.train.num_workers,
-        drop_last=config.train.drop_last,
-        pin_memory=False,
-        persistent_workers=True,
-        collate_fn=collate_patients_fn  # Use our custom collate function
-    )
-    
-    return train_loader, valid_loader
 
 
 def main(args):
@@ -188,81 +125,81 @@ def main(args):
     set_determinism(seed=config.train.seed)
     print_config()
 
-    run_dir, resume = setup_run_dir(config=config, args=args,
-                                   base_path=base_path)
+    # Add suffix to run_dir based on label filter for easier identification
+    if args.dataset == "caueeg2" and hasattr(args, 'label_filter') and args.label_filter:
+        if isinstance(args.label_filter, list):
+            label_suffix = '_'.join(str(l) for l in args.label_filter)
+        else:
+            label_suffix = str(args.label_filter)
+        config.train.run_dir = f"{config.train.run_dir}_label_{label_suffix}"
+        print(f"Using modified run directory: {config.train.run_dir}")
 
-    # Setting up tensorboard writers
+    run_dir, resume = setup_run_dir(config=config, args=args,
+                                    base_path=base_path)
+
+    # Getting write training and validation data
+
     writer_train = SummaryWriter(log_dir=str(run_dir / "train"))
     writer_val = SummaryWriter(log_dir=str(run_dir / "val"))
-    
-    # Get dataset-specific transforms
     trans = get_trans(args.dataset)
-    
-    # Getting data loaders with our custom collate function
-    train_loader, val_loader = create_dataloaders(config, args, trans)
 
-    # Sanity check: print shape of first batch
-    sample_batch = next(iter(train_loader))
-    num_patients = len(sample_batch)
-    print(f"Sample batch contains {num_patients} patients")
-    for i, patient in enumerate(sample_batch):
-        print(f"  Patient {i+1}: {patient['eeg'].shape} (epochs, channels, timepoints)")
+    # Getting data loaders
+    print(f"Loading {args.dataset} dataset...")
+    if args.dataset == "caueeg2":
+        if not os.path.exists(os.path.join(args.path_pre_processed, 'Feature')):
+            raise ValueError(f"CAUEEG2 Feature directory not found at {os.path.join(args.path_pre_processed, 'Feature')}. "
+                           "Please check --path_pre_processed points to the correct CAUEEG2 base directory.")
+        print(f"CAUEEG2 data path: {args.path_pre_processed}")
+        if args.label_filter:
+            print(f"Using label filter: {args.label_filter}")
     
+    train_loader = train_dataloader(config=config, args=args, transforms_list=trans, dataset=args.dataset)
+    val_loader = valid_dataloader(config=config, args=args, transforms_list=trans, dataset=args.dataset)
+
+    # Test the data loader to make sure it works
+    print("Testing data loader...")
+    first_batch = first(train_loader)
+    print(f"First batch EEG shape: {first_batch['eeg'].shape}")
+    if 'subject' in first_batch:
+        print(f"First batch subjects shape: {first_batch['subject'].shape}")
+    if 'label' in first_batch:
+        print(f"First batch labels shape: {first_batch['label'].shape}")
+
     # Defining device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using {device}")
 
-    # Configure model parameters
     parameters = config['model']['params']['unet_config']['params']
-    
-    # Adjust parameters for CAUEEG2 dataset - Note: UNet still expects [batch, channels, timepoints]
     parameters['in_channels'] = 19
     parameters['out_channels'] = 19
-    parameters['image_size'] = 1000  # Set image_size to match timepoints dimension
 
-    # Print model parameters
-    print(f"UNet parameters: {parameters}")
-
-    # Initialize the diffusion model (the original UNet)
-    print("Initializing base UNet model...")
-    unet_model = UNetModel(**parameters)
+    diffusion = UNetModel(**parameters)
     
-    # Wrap the UNet in our batched patient wrapper
-    print("Creating batched patient wrapper model...")
-    diffusion = BatchedPatientDiffusionWrapper(unet_model)
-    
-    # Multi-GPU support
     if torch.cuda.device_count() > 1:
         print(f"Using {torch.cuda.device_count()} GPUs")
         diffusion = torch.nn.DataParallel(diffusion)
 
     diffusion.to(device)
 
-    # Set up the diffusion scheduler
     scheduler = DDPMScheduler(num_train_timesteps=1000, schedule="linear_beta",
-                            beta_start=0.0015, beta_end=0.0195)
+                              beta_start=0.0015, beta_end=0.0195)
     
     scheduler.to(device)
-    
-    # Determine whether to use spectral loss
     if args.spe == 'spectral':
         spectral_loss = True
         print("Using spectral loss")
     else:
         spectral_loss = False
 
-    # Initialize the diffusion inferer
     inferer = DiffusionInferer(scheduler)
 
-    # Set up the optimizer
     optimizer = torch.optim.Adam(diffusion.parameters(), lr=1e-4)
 
     best_loss = float("inf")
     start_epoch = 0
 
-    print(f"Starting Training")
-    # Use our modified training function for batched patients
-    val_loss = train_diffusion_batched_patients(
+    print(f"Starting Training with {args.dataset} dataset")
+    val_loss = train_diffusion_(
         model=diffusion,
         scheduler=scheduler,
         start_epoch=start_epoch,
@@ -281,7 +218,6 @@ def main(args):
         spectral_weight=1E-6
     )
 
-    # Log the results
     log_mlflow(
         model=diffusion,
         config=config,

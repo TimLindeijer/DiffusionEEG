@@ -133,6 +133,60 @@ def caueeg2_collate_fn(batch):
     
     return collated
 
+def caueeg2_collate_fn_fixed_epochs(batch, target_batch_size=32):
+    """
+    Custom collate function that returns exactly target_batch_size epochs,
+    regardless of how many files are loaded.
+    """
+    # batch is a list of dictionaries, one per patient
+    
+    # Collect all epochs from all patients
+    all_epochs = []
+    all_subjects = []
+    all_labels = []
+    
+    for item in batch:
+        eeg_data = item['eeg']  # Shape: [epochs, channels, timepoints]
+        num_epochs = eeg_data.shape[0]
+        
+        # Add each epoch as a separate sample
+        for epoch_idx in range(num_epochs):
+            all_epochs.append(eeg_data[epoch_idx])  # Shape: [channels, timepoints]
+            all_subjects.append(item['subject'])
+            if 'label' in item:
+                all_labels.append(item['label'])
+            
+            # Stop once we have enough epochs
+            if len(all_epochs) >= target_batch_size:
+                break
+        
+        # Break out of outer loop too if we have enough
+        if len(all_epochs) >= target_batch_size:
+            break
+    
+    # Take exactly target_batch_size epochs (or fewer if not enough data)
+    final_size = min(len(all_epochs), target_batch_size)
+    all_epochs = all_epochs[:final_size]
+    all_subjects = all_subjects[:final_size]
+    if all_labels:
+        all_labels = all_labels[:final_size]
+    
+    # Stack all epochs into a single batch
+    batch_eeg = torch.stack(all_epochs)  # Shape: [final_size, channels, timepoints]
+    
+    # Create the output dictionary
+    collated = {
+        'eeg': batch_eeg,
+        'subject': torch.tensor(all_subjects),
+    }
+    
+    if all_labels:
+        collated['label'] = torch.tensor(all_labels)
+    
+    print(f"Collated batch: {final_size} epochs from {len(batch)} files")
+    return collated
+
+
 
 def default_collate_fn(batch):
     """Default collate function for non-CAUEEG2 datasets"""

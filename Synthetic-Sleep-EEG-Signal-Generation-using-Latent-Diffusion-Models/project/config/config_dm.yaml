@@ -1,13 +1,13 @@
 train:
   seed: 2
-  batch_size: 1  # Reduced batch size to handle larger data dimensions
-  n_epochs: 200
+  batch_size: 2
+  n_epochs: 1000
   eval_freq: 50
   num_workers: 10
   experiment: 'DDPM_CAUEEG2'
   output_dir: '/project/outputs'
   data_root: '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2'
-  run_dir: 'batched_dm_eeg_caueeg2'
+  run_dir: 'dm_eeg_caueeg2'
   drop_last: false
   base_lr: 0.0001
   save_every: 50
