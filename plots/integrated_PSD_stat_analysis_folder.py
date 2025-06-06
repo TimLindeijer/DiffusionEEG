@@ -700,14 +700,14 @@ def create_summary_comparison(all_results, output_dir):
 if __name__ == "__main__":
     # Example paths - replace with your actual file paths
     real_data_path = 'dataset/CAUEEG2'
-    synthetic_data_path = 'dataset/LDM_PSD_Normalized_FIX_NO_SPEC'
+    synthetic_data_path = 'dataset/PURE_LDM_PSD_Normalized'
     
     # Run complete analysis
     results = run_complete_psd_analysis(
         real_dataset_folder=real_data_path,
         synthetic_dataset_folder=synthetic_data_path,
         conditions=['HC', 'MCI', 'Dementia'],
-        output_dir='images/statistical_analysis_matched_subjects_LDM_PSD_Normalized_FIX_NO_SPEC'
+        output_dir='images/statistical_analysis_matched_subjects_PURE_LDM_PSD_Normalized'
     )
     
     print("\nAnalysis complete! Check the output directory for results.")

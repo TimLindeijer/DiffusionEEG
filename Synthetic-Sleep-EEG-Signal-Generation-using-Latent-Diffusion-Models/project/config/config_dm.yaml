@@ -7,7 +7,7 @@ train:
   experiment: 'DDPM_CAUEEG2'
   output_dir: '/project/outputs'
   data_root: '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2'
-  run_dir: 'dm_eeg_caueeg2'
+  run_dir: 'dm_eeg_caueeg2_no_spec'
   drop_last: false
   base_lr: 0.0001
   save_every: 50

@@ -2,8 +2,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=24:00:00
-#SBATCH --job-name=GREEN-LDM-CAUEEG2-Transfer
-#SBATCH --output=outputs/GREEN_LDM_CAUEEG2_Transfer_%j.out
+#SBATCH --job-name=nospecGREEN-LDM-CAUEEG2-Transfer
+#SBATCH --output=outputs/nospecGREEN_LDM_CAUEEG2_Transfer_%j.out
 
 # Activate environment (adjust based on your system)
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
