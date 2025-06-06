@@ -13,6 +13,7 @@ mkdir -p results/caueeg2_classification
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
 uenv miniconda3-py38
 conda activate green-env
+
 # pip install wandb
 # pip install geotorch
 # pip install lightning
