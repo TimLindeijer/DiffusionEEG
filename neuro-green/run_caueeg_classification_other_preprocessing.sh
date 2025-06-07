@@ -63,8 +63,8 @@ echo "W&B enabled: Yes"
     --learning_rate 0.0003 \
     --weight_decay 1e-5 \
     --max_epochs 300 \
-    --n_freqs 15 \
-    --kernel_width_s 5 \
+    --n_freqs 10 \
+    --kernel_width_s 0.5 \
     --hidden_dim 64 32 \
     --dropout 0.5 \
     --num_workers 1 \

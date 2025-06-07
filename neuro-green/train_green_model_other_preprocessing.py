@@ -679,8 +679,11 @@ def main():
         targets=targets,
         subjects=all_subjects_list,
         n_epochs=10,  # Use 10 epochs per subject
-        padding='repeat'
-    )
+        padding='repeat',
+        shuffle=False,
+        shuffle_first_epoch=True,
+        randomize_epochs=False
+        )
     
     # Log dataset information to wandb
     if args.use_wandb:

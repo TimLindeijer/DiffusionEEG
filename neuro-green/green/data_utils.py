@@ -12,6 +12,7 @@ class EpochsDataset(Dataset):
                  padding='repeat',
                  shuffle_first_epoch: bool = False,
                  shuffle: bool = False,
+                 randomize_epochs: bool = False,
                  random_state: int = 0,
                  transform_y=lambda x: x,
                  transform_x=lambda x: torch.Tensor(x * 1e6 / 8),
@@ -59,24 +60,34 @@ class EpochsDataset(Dataset):
         self.shuffle_first_epoch = shuffle_first_epoch
         self.rng = np.random.default_rng(random_state)
         self.shuffle = shuffle
+        self.randomize_epochs = randomize_epochs
         self.age = age
 
     def __getitem__(self, idx):
 
         # shuffle the start index of the epochs.
         # TODO: consider using a random sampling mixing all the epochs instead
-        if self.shuffle_first_epoch and (
-                len(self.epochs[idx]) > self.n_epochs):
-            start_idx = self.rng.choice(
-                np.arange(len(self.epochs[idx]) - self.n_epochs)
+        if self.randomize_epochs:
+            X_full = self.epochs[idx].get_data()
+            sample_idx = self.rng.choice(
+                np.arange(X_full.shape[0]),
+                replace=self.n_epochs > X_full.shape[0],
+                size=self.n_epochs
             )
+            X_orig = X_full[sample_idx]
         else:
-            start_idx = 0
+            if self.shuffle_first_epoch and (
+                    len(self.epochs[idx]) > self.n_epochs):
+                start_idx = self.rng.choice(
+                    np.arange(len(self.epochs[idx]) - self.n_epochs)
+                )
+            else:
+                start_idx = 0
 
-        # get the epochs and the target
-        X_orig = self.epochs[idx][start_idx: start_idx +
+            # get the epochs
+            X_orig = self.epochs[idx][start_idx: start_idx +
                                   self.n_epochs].get_data()
-        y = self.targets[idx]
+        
 
         if self.shuffle:
             # Sample with replacement if n_epochs > len(epochs)
@@ -104,7 +115,8 @@ class EpochsDataset(Dataset):
                     X = np.concatenate([X_orig, X_orig[repeated_ids]], axis=0)
             else:
                 X = X_orig
-
+        #get targets
+        y = self.targets[idx]
         y = self.transform_y(y)
         X = self.transform_x(X)
         if self.age is not None:
