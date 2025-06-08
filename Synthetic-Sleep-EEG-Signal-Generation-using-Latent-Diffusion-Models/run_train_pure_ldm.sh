@@ -2,8 +2,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=48:00:00
-#SBATCH --job-name=dm_caueeg2_no_spec
-#SBATCH --output=outputs/dm_caueeg2_no_spec_%j.out
+#SBATCH --job-name=dm_spec_min_1
+#SBATCH --output=outputs/dm_caueeg2_spec_min_1_%j.out
 #SBATCH --signal=B:USR1@300
 #SBATCH --requeue
 
@@ -55,7 +55,8 @@ python src/train_pure_ldm.py \
     --dataset caueeg2 \
     --path_pre_processed /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
     --label_filter $CONDITION \
-    --config_file /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_dm.yaml
+    --config_file /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_dm.yaml \
+    --spe spectral
 
 # Record completion
 echo "Job completed/interrupted at $(date)"

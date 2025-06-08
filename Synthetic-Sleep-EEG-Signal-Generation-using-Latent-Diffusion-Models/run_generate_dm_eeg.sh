@@ -51,16 +51,16 @@ echo "Run ID: ${TIMESTAMP}, generating on ${CONDITION} only"
 # Run the generation script with PSD normalization
 python src/generate_dm_eeg.py \
   --category $CONDITION \
-  --hc_model_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/dm_eeg_caueeg2_label_0/final_model.pth \
-  --mci_model_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/dm_eeg_caueeg2_label_1/final_model.pth \
-  --dementia_model_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/dm_eeg_caueeg2_label_2/final_model.pth \
+  --hc_model_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/dm_eeg_caueeg2_no_spec_label_0/final_model.pth \
+  --mci_model_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/dm_eeg_caueeg2_no_spec_label_1/final_model.pth \
+  --dementia_model_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/dm_eeg_caueeg2_no_spec_label_2/final_model.pth \
   --diffusion_config /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_dm.yaml \
   --original_label_path /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2/Label/label.npy \
   --original_data_path /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2/Feature \
-  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/PURE_LDM_PSD_Normalized \
+  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/DM_NO_SPEC \
   --num_timepoints 1000 \
   --diffusion_steps 1000 \
-  --batch_epochs 64 \
+  --batch_epochs 71 \
   --normalize_psd \
   --per_channel \
   --plot_psd \
