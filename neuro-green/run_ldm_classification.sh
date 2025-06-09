@@ -2,8 +2,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=24:00:00
-#SBATCH --job-name=mlr_diffusion_comparisons
-#SBATCH --output=outputs/mlr_diffusion_comparisons_%j.out
+#SBATCH --job-name=no_seperate_test
+#SBATCH --output=outputs/no_seperate_test_%j.out
 
 # =====================================
 # CONFIGURATION - CHANGE THESE VALUES
@@ -27,15 +27,14 @@ COMBINATION="${SHUFFLE_STR}${SHUFFLE_FIRST_STR}${RANDOMIZE_STR}"
 # Update job name to include combination
 
 # Set paths
-DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/DM_SPEC_MINUS_2"
-TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_ready_datasets/test_genuine"
+DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/PURE_LDM_PSD_Normalized"
 
 # Create output directory name with combination
-OUTPUT_DIR="results/DM_SPEC_MINUS_2_${COMBINATION}"
+OUTPUT_DIR="results/NO_TEST_PURE_LDM_PSD_Normalized_${COMBINATION}"
 mkdir -p $OUTPUT_DIR
 
 # Create run name with combination and timestamp
-RUN_NAME="MLR_DM_SPEC_MINUS_2_${COMBINATION}_$(date +%Y%m%d_%H%M%S)"
+RUN_NAME="NO_TEST_PURE_LDM_PSD_Normalized_${COMBINATION}_$(date +%Y%m%d_%H%M%S)"
 
 # Activate environment (adjust based on your system)
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
@@ -62,8 +61,6 @@ echo "========================================"
 # Build the command with conditional flags
 CMD_ARGS="--data_dir $DATA_DIR \
     --output_dir $OUTPUT_DIR \
-    --test_data_dir $TEST_DATA_DIR \
-    --use_separate_test \
     --batch_size 16 \
     --learning_rate 0.0003 \
     --weight_decay 1e-5 \
