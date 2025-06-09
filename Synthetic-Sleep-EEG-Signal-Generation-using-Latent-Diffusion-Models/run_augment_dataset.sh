@@ -18,8 +18,8 @@ cd Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models
 
 python src/dataset_creation/augment_dataset.py \
   --genuine_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
-  --synthetic_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized \
-  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_ready_datasets \
+  --synthetic_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/DM_SPEC_MINUS_2 \
+  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/dm_norm_fix_spec_mins_2_ready_datasets \
   --test_size 0.2 \
   --stratify \
   --percentages 20,40,60,80,100
