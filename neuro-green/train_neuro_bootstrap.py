@@ -386,7 +386,7 @@ def calculate_bootstrap_statistics(all_metrics, output_dir, use_wandb=False):
     metrics_df = pd.DataFrame(all_metrics)
     
     # Calculate statistics
-    stats_dict = {}
+    statistics_dict = {}
     
     for metric in metrics_df.columns:
         values = metrics_df[metric].values
@@ -402,7 +402,7 @@ def calculate_bootstrap_statistics(all_metrics, output_dir, use_wandb=False):
         ci_lower = mean_val - margin_error
         ci_upper = mean_val + margin_error
         
-        stats_dict[metric] = {
+        statistics_dict[metric] = {
             'mean': mean_val,
             'std': std_val,
             'min': np.min(values),
@@ -421,27 +421,27 @@ def calculate_bootstrap_statistics(all_metrics, output_dir, use_wandb=False):
         print(f"  95% CI: [{ci_lower:.4f}, {ci_upper:.4f}]")
     
     # Save statistics
-    stats_df = pd.DataFrame(stats_dict).T
-    stats_df.to_csv(os.path.join(output_dir, 'bootstrap_statistics.csv'))
+    statistics_df = pd.DataFrame(statistics_dict).T
+    statistics_df.to_csv(os.path.join(output_dir, 'bootstrap_statistics.csv'))
     
     # Save detailed results
     metrics_df.to_csv(os.path.join(output_dir, 'bootstrap_all_runs.csv'), index=False)
     
     # Save summary
     with open(os.path.join(output_dir, 'bootstrap_summary.json'), 'w') as f:
-        json.dump(stats_dict, f, indent=4)
+        json.dump(statistics_dict, f, indent=4)
     
     # Log to wandb
     if use_wandb and wandb.run is not None:
         wandb_stats = {}
-        for metric, stats in stats_dict.items():
-            wandb_stats[f"{metric}_mean"] = stats['mean']
-            wandb_stats[f"{metric}_std"] = stats['std']
-            wandb_stats[f"{metric}_ci_lower"] = stats['ci_lower']
-            wandb_stats[f"{metric}_ci_upper"] = stats['ci_upper']
+        for metric, metric_stats in statistics_dict.items():
+            wandb_stats[f"{metric}_mean"] = metric_stats['mean']
+            wandb_stats[f"{metric}_std"] = metric_stats['std']
+            wandb_stats[f"{metric}_ci_lower"] = metric_stats['ci_lower']
+            wandb_stats[f"{metric}_ci_upper"] = metric_stats['ci_upper']
         
         # Add summary table
-        summary_table = wandb.Table(dataframe=stats_df.reset_index().rename(columns={"index": "metric"}))
+        summary_table = wandb.Table(dataframe=statistics_df.reset_index().rename(columns={"index": "metric"}))
         wandb_stats["bootstrap_statistics_table"] = summary_table
         
         # Add individual runs table
@@ -450,7 +450,7 @@ def calculate_bootstrap_statistics(all_metrics, output_dir, use_wandb=False):
         
         wandb.log(wandb_stats)
     
-    return stats_dict
+    return statistics_dict
 
 def main():
     """Main function to run bootstrap training and evaluation."""
@@ -580,12 +580,17 @@ def main():
         print(f"BOOTSTRAP RUN {bootstrap_run + 1}/{args.n_bootstrap}")
         print(f"{'='*60}")
         
+        # Set different seed for each bootstrap run
+        bootstrap_seed = args.seed + bootstrap_run
+        set_seed(bootstrap_seed)
+        print(f"Bootstrap run {bootstrap_run + 1} using seed: {bootstrap_seed}")
+        
         # Create bootstrap sample
         bootstrap_train_indices = create_bootstrap_sample(
             original_train_indices, 
             all_labels_list, 
             sample_ratio=args.bootstrap_sample_ratio,
-            random_state=args.seed + bootstrap_run  # Different seed for each bootstrap
+            random_state=bootstrap_seed
         )
         
         # Create dataset with bootstrap sample
@@ -679,7 +684,7 @@ def main():
     
     # Calculate bootstrap statistics
     if all_metrics:
-        stats_dict = calculate_bootstrap_statistics(all_metrics, args.output_dir, args.use_wandb)
+        statistics_dict = calculate_bootstrap_statistics(all_metrics, args.output_dir, args.use_wandb)
         
         # Calculate total training time
         total_time = time.time() - start_time
@@ -710,9 +715,9 @@ def main():
         print(f"{'='*60}")
         print(f"Number of bootstrap runs: {args.n_bootstrap}")
         print(f"Key metrics (Mean ± Std):")
-        print(f"  Accuracy: {stats_dict['accuracy']['mean']:.4f} ± {stats_dict['accuracy']['std']:.4f}")
-        print(f"  Balanced Accuracy: {stats_dict['balanced_accuracy']['mean']:.4f} ± {stats_dict['balanced_accuracy']['std']:.4f}")
-        print(f"  Macro F1: {stats_dict['macro_f1']['mean']:.4f} ± {stats_dict['macro_f1']['std']:.4f}")
+        print(f"  Accuracy: {statistics_dict['accuracy']['mean']:.4f} ± {statistics_dict['accuracy']['std']:.4f}")
+        print(f"  Balanced Accuracy: {statistics_dict['balanced_accuracy']['mean']:.4f} ± {statistics_dict['balanced_accuracy']['std']:.4f}")
+        print(f"  Macro F1: {statistics_dict['macro_f1']['mean']:.4f} ± {statistics_dict['macro_f1']['std']:.4f}")
         
     else:
         print("No bootstrap runs completed successfully!")

@@ -9,11 +9,11 @@
 # USAGE EXAMPLES
 # =====================================
 # Run with different percentages:
-#   sbatch neuro-green/run_neuro_bootstrap.sh 20    → uses train_augmented_20pct,  output: bootstrap_augmented_20pct_TFF_20runs
-#   sbatch neuro-green/run_neuro_bootstrap.sh 40    → uses train_augmented_40pct,  output: bootstrap_augmented_40pct_TFF_20runs  
-#   sbatch neuro-green/run_neuro_bootstrap.sh 60    → uses train_augmented_60pct,  output: bootstrap_augmented_60pct_TFF_20runs
-#   sbatch neuro-green/run_neuro_bootstrap.sh 80    → uses train_augmented_80pct,  output: bootstrap_augmented_80pct_TFF_20runs
-#   sbatch neuro-green/run_neuro_bootstrap.sh 100   → uses train_augmented_100pct, output: bootstrap_augmented_100pct_TFF_20runs
+#   sbatch neuro-green/run_neuro_bootstrap.sh 20    → uses train_augmented_20pct,  output: bootstrap_augmented_20pct_TFF_10runs
+#   sbatch neuro-green/run_neuro_bootstrap.sh 40    → uses train_augmented_40pct,  output: bootstrap_augmented_40pct_TFF_10runs  
+#   sbatch neuro-green/run_neuro_bootstrap.sh 60    → uses train_augmented_60pct,  output: bootstrap_augmented_60pct_TFF_10runs
+#   sbatch neuro-green/run_neuro_bootstrap.sh 80    → uses train_augmented_80pct,  output: bootstrap_augmented_80pct_TFF_10runs
+#   sbatch neuro-green/run_neuro_bootstrap.sh 100   → uses train_augmented_100pct, output: bootstrap_augmented_100pct_TFF_10runs
 #   sbatch neuro-green/run_neuro_bootstrap.sh       → uses train_augmented_100pct (default)
 #
 # To run all percentages:
@@ -37,7 +37,7 @@ fi
 # CONFIGURATION - CHANGE BASE PATHS HERE
 # =====================================
 # Base data paths - the percentage will be automatically inserted
-BASE_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/pure_ldm_norm_fix_spec_ready_datasets"
+BASE_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ftsurrogate_ready_datasets"
 
 # Construct training data directory with percentage
 DATA_DIR="$BASE_DATA_DIR/train_augmented_${PERCENTAGE}pct"
@@ -72,7 +72,7 @@ SHUFFLE_FIRST_EPOCH=false
 RANDOMIZE_EPOCHS=false
 
 # Bootstrap configuration
-N_BOOTSTRAP=20                    # Number of bootstrap samples
+N_BOOTSTRAP=10                    # Number of bootstrap samples
 BOOTSTRAP_SAMPLE_RATIO=1.0       # Ratio of original training size (1.0 = same size with replacement)
 
 # =====================================
