@@ -27,15 +27,15 @@ COMBINATION="${SHUFFLE_STR}${SHUFFLE_FIRST_STR}${RANDOMIZE_STR}"
 # Update job name to include combination
 
 # Set paths
-DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/pure_ldm_norm_fix_spec_ready_datasets/train_augmented_100pct"
-TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/pure_ldm_norm_fix_spec_ready_datasets/test_genuine"
+DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/lead_norm_ready_datasets/train_augmented_100pct"
+TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/lead_norm_ready_datasets/test_genuine"
 
 # Create output directory name with combination
-OUTPUT_DIR="results/pure_ldm_norm_fix_spec_ready_datasets${COMBINATION}"
+OUTPUT_DIR="results/lead_norm_ready_datasets${COMBINATION}"
 mkdir -p $OUTPUT_DIR
 
 # Create run name with combination and timestamp
-RUN_NAME="pure_ldm_norm_fix_spec_ready_datasets${COMBINATION}_$(date +%Y%m%d_%H%M%S)"
+RUN_NAME="lead_norm_ready_datasets${COMBINATION}_$(date +%Y%m%d_%H%M%S)"
 
 # Activate environment (adjust based on your system)
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0

@@ -336,14 +336,51 @@ def evaluate_prediction_results(all_preds, output_dir, bootstrap_run=None, use_w
     balanced_acc = balanced_accuracy_score(y_true, y_pred)
     report = classification_report(y_true, y_pred, output_dict=True)
     
+    # Calculate balanced/class-weighted metrics manually
+    unique_classes = sorted(set(y_true) | set(y_pred))
+    n_classes = len(unique_classes)
+    
+    # Get class weights (inverse of class frequency for balancing)
+    class_counts = np.bincount(y_true.astype(int), minlength=max(unique_classes)+1)
+    class_counts = class_counts[unique_classes]  # Keep only existing classes
+    class_weights = 1.0 / (class_counts / np.sum(class_counts))  # Inverse frequency
+    class_weights = class_weights / np.sum(class_weights)  # Normalize to sum to 1
+    
+    # Calculate balanced precision, recall, f1 (weighted by inverse class frequency)
+    balanced_precision = 0
+    balanced_recall = 0
+    balanced_f1 = 0
+    
+    for i, cls in enumerate(unique_classes):
+        if str(cls) in report:
+            cls_precision = report[str(cls)]['precision']
+            cls_recall = report[str(cls)]['recall']
+            cls_f1 = report[str(cls)]['f1-score']
+            
+            # Weight by inverse class frequency
+            balanced_precision += cls_precision * class_weights[i]
+            balanced_recall += cls_recall * class_weights[i]
+            balanced_f1 += cls_f1 * class_weights[i]
+    
     # Create metrics dictionary
     metrics = {
         'accuracy': report['accuracy'],
         'balanced_accuracy': balanced_acc,
+        
+        # Macro averages (equal weight per class)
         'macro_f1': report['macro avg']['f1-score'],
-        'weighted_f1': report['weighted avg']['f1-score'],
         'macro_precision': report['macro avg']['precision'],
-        'macro_recall': report['macro avg']['recall']
+        'macro_recall': report['macro avg']['recall'],
+        
+        # Weighted averages (weighted by support)
+        'weighted_f1': report['weighted avg']['f1-score'],
+        'weighted_precision': report['weighted avg']['precision'],
+        'weighted_recall': report['weighted avg']['recall'],
+        
+        # Balanced averages (weighted by inverse class frequency)
+        'balanced_precision': balanced_precision,
+        'balanced_recall': balanced_recall,
+        'balanced_f1': balanced_f1,
     }
     
     # Add per-class metrics
