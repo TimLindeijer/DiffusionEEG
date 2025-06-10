@@ -183,20 +183,23 @@ def run_mne_cluster_permutation_test(real_psds, synthetic_psds, freqs, n_permuta
     real_stacked = np.stack(real_avg_list, axis=0)
     synth_stacked = np.stack(synth_avg_list, axis=0)
     
-    # Reshape for MNE format: (n_subjects, n_channels * n_freqs)
-    n_subjects, n_channels, n_freqs = real_stacked.shape
-    real_reshaped = real_stacked.reshape(n_subjects, -1)
-    synth_reshaped = synth_stacked.reshape(n_subjects, -1)
+    # Calculate the difference for paired test
+    # Shape: (n_subjects, n_channels, n_freqs)
+    diff_stacked = real_stacked - synth_stacked
     
-    # Create observation array for paired test
-    X = np.array([real_reshaped, synth_reshaped])
-    X = np.transpose(X, [1, 2, 0])  # Shape: (n_subjects, n_features, n_conditions)
+    # Reshape for MNE format: (n_subjects, n_channels * n_freqs)
+    n_subjects, n_channels, n_freqs = diff_stacked.shape
+    diff_reshaped = diff_stacked.reshape(n_subjects, -1)
+    
+    # For paired test, we test if the difference is significantly different from 0
+    # Shape needs to be (n_observations, n_features) where n_observations = n_subjects
+    X = diff_reshaped[:, :, np.newaxis]  # Shape: (n_subjects, n_features, 1)
     
     print(f"Running paired permutation cluster test with {n_subjects} subjects...")
     print(f"Data shape for test: {X.shape}")
     
     # Run permutation cluster test
-    # For paired samples, we test the difference against 0
+    # For one-sample test (testing if difference != 0)
     threshold = None  # Will use default threshold based on t-distribution
     T_obs, clusters, cluster_p_values, H0 = permutation_cluster_test(
         X, n_permutations=n_permutations, threshold=threshold, tail=0,
@@ -210,23 +213,24 @@ def run_mne_cluster_permutation_test(real_psds, synthetic_psds, freqs, n_permuta
     significant_clusters_mask = np.zeros((n_channels, n_freqs), dtype=bool)
     cluster_info = {}
     
-    for cluster_idx, (cluster, p_val) in enumerate(zip(clusters, cluster_p_values)):
-        if p_val < alpha:
-            # Reshape cluster mask
-            cluster_2d = cluster.reshape(n_channels, n_freqs)
-            significant_clusters_mask |= cluster_2d
-            
-            # Find extent of cluster
-            ch_indices, freq_indices = np.where(cluster_2d)
-            
-            if len(ch_indices) > 0:
-                cluster_info[cluster_idx] = {
-                    'p_value': p_val,
-                    'size': len(ch_indices),
-                    'freq_range': (freqs[freq_indices.min()], freqs[freq_indices.max()]),
-                    'channels': np.unique(ch_indices).tolist(),
-                    'freq_indices': np.unique(freq_indices).tolist()
-                }
+    if len(clusters) > 0:
+        for cluster_idx, (cluster, p_val) in enumerate(zip(clusters, cluster_p_values)):
+            if p_val < alpha:
+                # Reshape cluster mask
+                cluster_2d = cluster.reshape(n_channels, n_freqs)
+                significant_clusters_mask |= cluster_2d
+                
+                # Find extent of cluster
+                ch_indices, freq_indices = np.where(cluster_2d)
+                
+                if len(ch_indices) > 0:
+                    cluster_info[cluster_idx] = {
+                        'p_value': p_val,
+                        'size': len(ch_indices),
+                        'freq_range': (freqs[freq_indices.min()], freqs[freq_indices.max()]),
+                        'channels': np.unique(ch_indices).tolist(),
+                        'freq_indices': np.unique(freq_indices).tolist()
+                    }
     
     return {
         'T_obs': T_obs_2d,
