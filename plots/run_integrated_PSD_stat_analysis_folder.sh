@@ -13,4 +13,4 @@ uenv verbose cuda-11.8.0 cudnn-11.x-8.7.0
 uenv miniconda3-py39
 conda activate ldm-eeg
 
-python plots/integrated_PSD_stat_analysis_folder.py
+python plots/integrated_PSD_stat_analysis_group.py

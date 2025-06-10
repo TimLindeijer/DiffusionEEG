@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import os
 from scipy import signal
 from scipy.ndimage import label
+from scipy.stats import ttest_ind
 from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
@@ -37,7 +38,32 @@ def load_and_preprocess_data(path, sfreq=200):
     
     return data, n_epochs, n_channels, n_times
 
-def calculate_psd_for_statistical_analysis(data, sfreq, fmin=1, fmax=30, nperseg=None):
+def normalize_psd_to_01(psd_data):
+    """
+    Normalize PSD data to 0-1 scale.
+    
+    Parameters:
+    -----------
+    psd_data : array, shape (n_epochs, n_channels, n_freqs)
+        PSD data
+        
+    Returns:
+    --------
+    normalized_psd : array, same shape as input
+        PSD data normalized to 0-1 range
+    """
+    # Find global min and max across all epochs, channels, and frequencies
+    global_min = np.min(psd_data)
+    global_max = np.max(psd_data)
+    
+    # Normalize to 0-1 scale
+    normalized_psd = (psd_data - global_min) / (global_max - global_min)
+    
+    print(f"PSD normalization: {global_min:.6f} to {global_max:.6f} -> 0.0 to 1.0")
+    
+    return normalized_psd
+
+def calculate_psd_for_statistical_analysis(data, sfreq, fmin=1, fmax=30, nperseg=None, normalize=True):
     """
     Calculate PSD data in format needed for statistical analysis.
     
@@ -51,6 +77,8 @@ def calculate_psd_for_statistical_analysis(data, sfreq, fmin=1, fmax=30, nperseg
         Frequency range for analysis
     nperseg : int, optional
         Length of each segment for Welch's method
+    normalize : bool
+        Whether to normalize PSDs to 0-1 scale
         
     Returns:
     --------
@@ -83,54 +111,68 @@ def calculate_psd_for_statistical_analysis(data, sfreq, fmin=1, fmax=30, nperseg
             _, psd = signal.welch(data[epoch_idx, ch_idx], fs=sfreq, nperseg=nperseg)
             psd_data[epoch_idx, ch_idx] = psd[mask]
     
+    # Normalize PSDs to 0-1 scale if requested
+    if normalize:
+        psd_data = normalize_psd_to_01(psd_data)
+    
     return psd_data, freqs
 
-class PSDStatisticalComparison:
+class GroupPSDStatisticalComparison:
     def __init__(self, n_permutations=1000, alpha=0.05, cluster_alpha=0.01):
         self.n_permutations = n_permutations
         self.alpha = alpha
         self.cluster_alpha = cluster_alpha
         
-    def permutation_test_single(self, real_data, synthetic_data):
-        """Perform permutation test for a single frequency-channel combination."""
-        observed_diff = np.mean(real_data) - np.mean(synthetic_data)
+    def permutation_test_groups(self, group1_data, group2_data):
+        """
+        Perform permutation test comparing two groups.
         
-        combined_data = np.concatenate([real_data, synthetic_data])
-        n_real = len(real_data)
+        Parameters:
+        -----------
+        group1_data : array, shape (n_subjects_group1, n_channels, n_freqs)
+        group2_data : array, shape (n_subjects_group2, n_channels, n_freqs)
         
-        perm_diffs = []
-        for _ in range(self.n_permutations):
-            shuffled = np.random.permutation(combined_data)
-            perm_real = shuffled[:n_real]
-            perm_synthetic = shuffled[n_real:]
-            perm_diff = np.mean(perm_real) - np.mean(perm_synthetic)
-            perm_diffs.append(perm_diff)
-        
-        perm_diffs = np.array(perm_diffs)
-        p_value = np.mean(np.abs(perm_diffs) >= np.abs(observed_diff))
-        
-        return p_value, observed_diff
-    
-    def mass_univariate_test(self, real_psds, synthetic_psds, freqs, channels):
-        """Perform mass-univariate permutation tests."""
-        n_channels, n_freqs = len(channels), len(freqs)
+        Returns:
+        --------
+        p_values : array, shape (n_channels, n_freqs)
+        effect_sizes : array, shape (n_channels, n_freqs)
+        """
+        n_channels, n_freqs = group1_data.shape[1], group1_data.shape[2]
         p_values = np.zeros((n_channels, n_freqs))
         effect_sizes = np.zeros((n_channels, n_freqs))
         
-        print("Running mass-univariate permutation tests...")
+        print("Running group-level permutation tests...")
         
         total_tests = n_channels * n_freqs
         pbar = tqdm(total=total_tests, desc="Testing freq-channel combinations")
         
         for ch_idx in range(n_channels):
             for freq_idx in range(n_freqs):
-                real_data = real_psds[:, ch_idx, freq_idx]
-                synthetic_data = synthetic_psds[:, ch_idx, freq_idx]
+                # Extract data for this channel-frequency combination
+                data1 = group1_data[:, ch_idx, freq_idx]  # All subjects in group 1
+                data2 = group2_data[:, ch_idx, freq_idx]  # All subjects in group 2
                 
-                p_val, effect = self.permutation_test_single(real_data, synthetic_data)
+                # Calculate observed difference
+                observed_diff = np.mean(data1) - np.mean(data2)
+                
+                # Combine data for permutation
+                combined_data = np.concatenate([data1, data2])
+                n1 = len(data1)
+                
+                # Permutation test
+                perm_diffs = []
+                for _ in range(self.n_permutations):
+                    shuffled = np.random.permutation(combined_data)
+                    perm_group1 = shuffled[:n1]
+                    perm_group2 = shuffled[n1:]
+                    perm_diff = np.mean(perm_group1) - np.mean(perm_group2)
+                    perm_diffs.append(perm_diff)
+                
+                perm_diffs = np.array(perm_diffs)
+                p_val = np.mean(np.abs(perm_diffs) >= np.abs(observed_diff))
                 
                 p_values[ch_idx, freq_idx] = p_val
-                effect_sizes[ch_idx, freq_idx] = effect
+                effect_sizes[ch_idx, freq_idx] = observed_diff
                 
                 pbar.update(1)
         
@@ -175,10 +217,11 @@ class PSDStatisticalComparison:
         return significant_clusters, cluster_info
     
     def plot_statistical_heatmap(self, p_values, effect_sizes, significant_clusters, 
-                               freqs, channels, cluster_info=None, figsize=(15, 10)):
-        """Create comprehensive statistical heatmap visualization."""
+                               freqs, channels, cluster_info=None, condition="", figsize=(15, 10)):
+        """Create comprehensive statistical heatmap visualization with improved effect size scaling."""
         fig, axes = plt.subplots(2, 2, figsize=figsize)
-        fig.suptitle('Statistical Comparison: Real vs Synthetic EEG PSDs', fontsize=16, fontweight='bold')
+        fig.suptitle(f'Group Statistical Comparison: Real vs Synthetic EEG PSDs - {condition}', 
+                    fontsize=16, fontweight='bold')
         
         # 1. P-values heatmap
         ax1 = axes[0, 0]
@@ -202,10 +245,16 @@ class PSDStatisticalComparison:
         sig_threshold = -np.log10(self.alpha)
         ax1.contour(-np.log10(p_values), levels=[sig_threshold], colors='white', linewidths=2)
         
-        # 2. Effect sizes heatmap
+        # 2. Effect sizes heatmap - CENTERED AROUND 0
         ax2 = axes[0, 1]
-        im2 = ax2.imshow(effect_sizes, aspect='auto', cmap='RdBu_r', interpolation='nearest')
-        ax2.set_title('Effect Sizes\n(Real - Synthetic)')
+        
+        # Center the colormap around 0
+        max_abs_effect = np.max(np.abs(effect_sizes))
+        vmin, vmax = -max_abs_effect, max_abs_effect
+        
+        im2 = ax2.imshow(effect_sizes, aspect='auto', cmap='RdBu_r', 
+                        interpolation='nearest', vmin=vmin, vmax=vmax)
+        ax2.set_title(f'Effect Sizes (Centered at 0)\n(Real - Synthetic)')
         ax2.set_xlabel('Frequency (Hz)')
         ax2.set_ylabel('Channels')
         
@@ -254,6 +303,10 @@ Effect Size Range:
 Min: {np.min(effect_sizes):.4f}
 Max: {np.max(effect_sizes):.4f}
 Mean: {np.mean(effect_sizes):.4f}
+Abs Max: {max_abs_effect:.4f}
+
+Note: PSDs normalized to 0-1 scale
+Effect sizes centered at 0
 """
         
         ax4.text(0.05, 0.95, summary_text, transform=ax4.transAxes, fontsize=10,
@@ -341,10 +394,10 @@ def load_labels_with_subject_ids(dataset_folder):
     
     return labels_array, condition_labels, subject_ids
 
-def find_matching_subjects_by_condition(real_dataset_folder, synthetic_dataset_folder, 
-                                       conditions=['HC', 'MCI', 'Dementia']):
+def load_all_subjects_by_condition(real_dataset_folder, synthetic_dataset_folder, 
+                                 conditions=['HC', 'MCI', 'Dementia']):
     """
-    Find matching subjects between real and synthetic datasets for each condition.
+    Load ALL subjects for each condition from both real and synthetic datasets.
     
     Parameters:
     -----------
@@ -353,13 +406,13 @@ def find_matching_subjects_by_condition(real_dataset_folder, synthetic_dataset_f
     synthetic_dataset_folder : str  
         Path to synthetic EEG dataset folder
     conditions : list
-        List of conditions to find matches for
+        List of conditions to load
         
     Returns:
     --------
-    matched_samples : dict
+    grouped_samples : dict
         Dictionary with condition names as keys and dictionaries as values.
-        Each sub-dictionary contains 'real_path', 'synthetic_path', 'subject_id'
+        Each sub-dictionary contains 'real_paths', 'synthetic_paths', 'real_indices', 'synthetic_indices'
     """
     
     # Map label values to condition names (adjust these mappings as needed)
@@ -375,10 +428,10 @@ def find_matching_subjects_by_condition(real_dataset_folder, synthetic_dataset_f
     print("Loading synthetic dataset labels...")
     synth_labels_array, synth_condition_labels, synth_subject_ids = load_labels_with_subject_ids(synthetic_dataset_folder)
     
-    matched_samples = {}
+    grouped_samples = {}
     
     for condition in conditions:
-        print(f"\nFinding matches for condition: {condition}")
+        print(f"\nLoading all subjects for condition: {condition}")
         
         # Find the label value for this condition
         label_value = None
@@ -391,72 +444,56 @@ def find_matching_subjects_by_condition(real_dataset_folder, synthetic_dataset_f
             print(f"Warning: Condition '{condition}' not found in label mapping")
             continue
         
-        # Find subjects with this condition in real dataset
+        # Find ALL subjects with this condition in real dataset
         real_condition_mask = real_condition_labels == label_value
-        real_subjects_with_condition = real_subject_ids[real_condition_mask]
         real_indices_with_condition = np.where(real_condition_mask)[0]
         
-        # Find subjects with this condition in synthetic dataset  
+        # Find ALL subjects with this condition in synthetic dataset  
         synth_condition_mask = synth_condition_labels == label_value
-        synth_subjects_with_condition = synth_subject_ids[synth_condition_mask]
         synth_indices_with_condition = np.where(synth_condition_mask)[0]
         
-        print(f"Real dataset: {len(real_subjects_with_condition)} subjects with {condition}")
-        print(f"Synthetic dataset: {len(synth_subjects_with_condition)} subjects with {condition}")
+        print(f"Real dataset: {len(real_indices_with_condition)} subjects with {condition}")
+        print(f"Synthetic dataset: {len(synth_indices_with_condition)} subjects with {condition}")
         
-        # Find common subject IDs
-        common_subject_ids = np.intersect1d(real_subjects_with_condition, synth_subjects_with_condition)
+        # Generate file paths for ALL subjects
+        real_feature_paths = []
+        synth_feature_paths = []
         
-        if len(common_subject_ids) == 0:
-            print(f"Warning: No matching subject IDs found for condition '{condition}'")
+        for idx in real_indices_with_condition:
+            real_feature_file = f"feature_{idx+1:02d}.npy"  # 1-indexed filenames
+            real_feature_path = os.path.join(real_dataset_folder, 'Feature', real_feature_file)
+            if os.path.exists(real_feature_path):
+                real_feature_paths.append(real_feature_path)
+            else:
+                print(f"Warning: Real feature file not found: {real_feature_path}")
+        
+        for idx in synth_indices_with_condition:
+            synth_feature_file = f"feature_{idx+1:02d}.npy"  # 1-indexed filenames
+            synth_feature_path = os.path.join(synthetic_dataset_folder, 'Feature', synth_feature_file)
+            if os.path.exists(synth_feature_path):
+                synth_feature_paths.append(synth_feature_path)
+            else:
+                print(f"Warning: Synthetic feature file not found: {synth_feature_path}")
+        
+        if len(real_feature_paths) == 0 or len(synth_feature_paths) == 0:
+            print(f"Warning: No valid feature files found for condition '{condition}'")
             continue
         
-        print(f"Found {len(common_subject_ids)} matching subjects: {common_subject_ids}")
-        
-        # Select the first matching subject (you can modify this to select differently)
-        selected_subject_id = common_subject_ids[0]
-        
-        # Find the indices for this subject in both datasets
-        real_idx = np.where((real_condition_labels == label_value) & 
-                           (real_subject_ids == selected_subject_id))[0][0]
-        synth_idx = np.where((synth_condition_labels == label_value) & 
-                            (synth_subject_ids == selected_subject_id))[0][0]
-        
-        # Generate file paths
-        real_feature_file = f"feature_{real_idx+1:02d}.npy"  # 1-indexed filenames
-        real_feature_path = os.path.join(real_dataset_folder, 'Feature', real_feature_file)
-        
-        synth_feature_file = f"feature_{synth_idx+1:02d}.npy"  # 1-indexed filenames
-        synth_feature_path = os.path.join(synthetic_dataset_folder, 'Feature', synth_feature_file)
-        
-        # Verify files exist
-        if not os.path.exists(real_feature_path):
-            print(f"Warning: Real feature file not found: {real_feature_path}")
-            continue
-            
-        if not os.path.exists(synth_feature_path):
-            print(f"Warning: Synthetic feature file not found: {synth_feature_path}")
-            continue
-        
-        matched_samples[condition] = {
-            'real_path': real_feature_path,
-            'synthetic_path': synth_feature_path,
-            'subject_id': selected_subject_id,
-            'real_index': real_idx,
-            'synthetic_index': synth_idx
+        grouped_samples[condition] = {
+            'real_paths': real_feature_paths,
+            'synthetic_paths': synth_feature_paths,
+            'real_indices': real_indices_with_condition,
+            'synthetic_indices': synth_indices_with_condition
         }
         
-        print(f"Selected subject {selected_subject_id} for {condition}:")
-        print(f"  Real: {real_feature_file} (index {real_idx}, label {real_labels_array[real_idx]})")
-        print(f"  Synthetic: {synth_feature_file} (index {synth_idx}, label {synth_labels_array[synth_idx]})")
+        print(f"Loaded {len(real_feature_paths)} real and {len(synth_feature_paths)} synthetic subjects for {condition}")
     
-    return matched_samples
+    return grouped_samples
 
-def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, output_dir='statistical_analysis', 
-                            conditions=['HC', 'MCI', 'Dementia'], sfreq=200, fmin=1, fmax=30, n_permutations=1000):
+def run_group_psd_analysis(real_dataset_folder, synthetic_dataset_folder, output_dir='group_statistical_analysis', 
+                          conditions=['HC', 'MCI', 'Dementia'], sfreq=200, fmin=1, fmax=30, n_permutations=1000):
     """
-    Run complete PSD statistical analysis comparing real and synthetic EEG data for multiple conditions.
-    Now matches subjects by subject ID instead of index position.
+    Run complete group-level PSD statistical analysis comparing real and synthetic EEG data.
     
     Parameters:
     -----------
@@ -480,50 +517,64 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
     os.makedirs(output_dir, exist_ok=True)
     
     print("="*60)
-    print("FINDING MATCHING SUBJECTS BY CONDITION AND SUBJECT ID")
+    print("LOADING ALL SUBJECTS BY CONDITION FOR GROUP ANALYSIS")
     print("="*60)
     
-    # Find matching subjects between datasets
-    matched_samples = find_matching_subjects_by_condition(
+    # Load all subjects for each condition
+    grouped_samples = load_all_subjects_by_condition(
         real_dataset_folder, synthetic_dataset_folder, conditions
     )
     
-    if not matched_samples:
-        raise ValueError("No matching subjects found between real and synthetic datasets")
+    if not grouped_samples:
+        raise ValueError("No valid subjects found for any condition")
     
-    print(f"\nAnalyzing {len(matched_samples)} conditions with matching subjects")
+    print(f"\nAnalyzing {len(grouped_samples)} conditions with group comparisons")
     
     all_results = {}
     
+    # Use standard 10-20 EEG channel names
+    standard_channels = ['FP1', 'F3', 'C3', 'P3', 'O1', 'FP2', 'F4', 'C4', 'P4', 'O2', 
+                        'F7', 'T3', 'T5', 'F8', 'T4', 'T6', 'FZ', 'CZ', 'PZ']
+    
     # Process each condition
-    for condition, sample_info in matched_samples.items():
+    for condition, sample_info in grouped_samples.items():
         print(f"\n{'='*60}")
         print(f"PROCESSING CONDITION: {condition}")
-        print(f"SUBJECT ID: {sample_info['subject_id']}")
         print(f"{'='*60}")
         
-        real_data_path = sample_info['real_path']
-        synthetic_data_path = sample_info['synthetic_path']
+        real_paths = sample_info['real_paths']
+        synthetic_paths = sample_info['synthetic_paths']
         
-        print(f"Real data: {real_data_path}")
-        print(f"Synthetic data: {synthetic_data_path}")
-        print(f"Matching subject ID: {sample_info['subject_id']}")
+        print(f"Real subjects: {len(real_paths)}")
+        print(f"Synthetic subjects: {len(synthetic_paths)}")
         
-        # Load and preprocess data
-        print("Loading real EEG data...")
-        real_data, n_epochs_real, n_channels, n_times = load_and_preprocess_data(real_data_path, sfreq)
+        # Load all real subjects
+        print("Loading all real EEG data...")
+        real_all_psds = []
+        for i, path in enumerate(real_paths):
+            print(f"  Loading real subject {i+1}/{len(real_paths)}: {os.path.basename(path)}")
+            data, _, n_channels, _ = load_and_preprocess_data(path, sfreq)
+            psds, freqs = calculate_psd_for_statistical_analysis(data, sfreq, fmin, fmax, normalize=True)
+            real_all_psds.append(psds)
         
-        print("Loading synthetic EEG data...")
-        synthetic_data, n_epochs_synth, _, _ = load_and_preprocess_data(synthetic_data_path, sfreq)
+        # Load all synthetic subjects
+        print("Loading all synthetic EEG data...")
+        synthetic_all_psds = []
+        for i, path in enumerate(synthetic_paths):
+            print(f"  Loading synthetic subject {i+1}/{len(synthetic_paths)}: {os.path.basename(path)}")
+            data, _, _, _ = load_and_preprocess_data(path, sfreq)
+            psds, _ = calculate_psd_for_statistical_analysis(data, sfreq, fmin, fmax, normalize=True)
+            synthetic_all_psds.append(psds)
         
-        # Check data compatibility
-        if real_data.shape[1:] != synthetic_data.shape[1:]:
-            raise ValueError(f"Data shape mismatch for {condition}: Real {real_data.shape} vs Synthetic {synthetic_data.shape}")
+        # Convert to numpy arrays and reshape for group analysis
+        # Shape: (n_subjects, n_epochs, n_channels, n_freqs) -> (n_subjects*n_epochs, n_channels, n_freqs)
+        real_group_data = np.concatenate(real_all_psds, axis=0)
+        synthetic_group_data = np.concatenate(synthetic_all_psds, axis=0)
         
-        # Use standard 10-20 EEG channel names
-        standard_channels = ['FP1', 'F3', 'C3', 'P3', 'O1', 'FP2', 'F4', 'C4', 'P4', 'O2', 
-                            'F7', 'T3', 'T5', 'F8', 'T4', 'T6', 'FZ', 'CZ', 'PZ']
+        print(f"Group data shapes: Real {real_group_data.shape}, Synthetic {synthetic_group_data.shape}")
+        print(f"Frequency range: {freqs[0]:.1f} - {freqs[-1]:.1f} Hz ({len(freqs)} frequencies)")
         
+        # Set channel names
         if n_channels == len(standard_channels):
             channels = standard_channels
         else:
@@ -531,21 +582,12 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
             print("Using generic channel names instead")
             channels = [f"EEG {i+1}" for i in range(n_channels)]
         
-        print("Calculating PSDs for real data...")
-        real_psds, freqs = calculate_psd_for_statistical_analysis(real_data, sfreq, fmin, fmax)
+        # Run group-level statistical comparison
+        print("Starting group-level statistical comparison...")
+        comparator = GroupPSDStatisticalComparison(n_permutations=n_permutations, alpha=0.05, cluster_alpha=0.01)
         
-        print("Calculating PSDs for synthetic data...")
-        synthetic_psds, _ = calculate_psd_for_statistical_analysis(synthetic_data, sfreq, fmin, fmax)
-        
-        print(f"PSD data shapes: Real {real_psds.shape}, Synthetic {synthetic_psds.shape}")
-        print(f"Frequency range: {freqs[0]:.1f} - {freqs[-1]:.1f} Hz ({len(freqs)} frequencies)")
-        
-        # Run statistical comparison
-        print("Starting statistical comparison...")
-        comparator = PSDStatisticalComparison(n_permutations=n_permutations, alpha=0.05, cluster_alpha=0.01)
-        
-        # Mass-univariate tests
-        p_values, effect_sizes = comparator.mass_univariate_test(real_psds, synthetic_psds, freqs, channels)
+        # Group-level permutation tests
+        p_values, effect_sizes = comparator.permutation_test_groups(real_group_data, synthetic_group_data)
         
         # Cluster correction
         significant_clusters, cluster_info = comparator.cluster_correction(p_values, freqs, channels)
@@ -556,44 +598,51 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
         
         # Create visualization
         fig = comparator.plot_statistical_heatmap(
-            p_values, effect_sizes, significant_clusters, freqs, channels, cluster_info
+            p_values, effect_sizes, significant_clusters, freqs, channels, cluster_info, condition
         )
-        fig.suptitle(f'Statistical Comparison: Real vs Synthetic EEG PSDs - {condition}\nSubject ID: {sample_info["subject_id"]}', 
-                    fontsize=16, fontweight='bold')
         
         # Save figure
-        fig_path = os.path.join(condition_output_dir, f'statistical_comparison_heatmap_{condition}_subject_{sample_info["subject_id"]}.png')
+        fig_path = os.path.join(condition_output_dir, f'group_statistical_comparison_{condition}.png')
         fig.savefig(fig_path, dpi=300, bbox_inches='tight')
-        print(f"Saved statistical heatmap to {fig_path}")
+        print(f"Saved group statistical heatmap to {fig_path}")
         
         # Print results
-        print(f"\n{condition} CLUSTER RESULTS (Subject {sample_info['subject_id']}):")
+        print(f"\n{condition} GROUP CLUSTER RESULTS:")
         comparator.print_cluster_results(cluster_info, freqs)
         
-        # Create traditional PSD comparison plot
-        print("Creating traditional PSD comparison plot...")
+        # Create normalized PSD comparison plot
+        print("Creating normalized PSD comparison plot...")
         fig_psd, ax = plt.subplots(figsize=(12, 8))
         
-        # Average PSDs across epochs
-        real_psd_avg = np.mean(real_psds, axis=0)
-        synthetic_psd_avg = np.mean(synthetic_psds, axis=0)
+        # Average PSDs across epochs and subjects for each group
+        real_group_avg = np.mean(real_group_data, axis=(0, 1))  # Average across epochs and channels
+        synthetic_group_avg = np.mean(synthetic_group_data, axis=(0, 1))
         
-        # Plot average across all channels
-        real_grand_avg = np.mean(real_psd_avg, axis=0)
-        synthetic_grand_avg = np.mean(synthetic_psd_avg, axis=0)
+        # Calculate standard error
+        real_group_std = np.std(np.mean(real_group_data, axis=1), axis=0) / np.sqrt(real_group_data.shape[0])
+        synthetic_group_std = np.std(np.mean(synthetic_group_data, axis=1), axis=0) / np.sqrt(synthetic_group_data.shape[0])
+        real_group_std_avg = np.mean(real_group_std, axis=0)
+        synthetic_group_std_avg = np.mean(synthetic_group_std, axis=0)
         
-        ax.semilogy(freqs, real_grand_avg, 'b-', linewidth=2, label='Real EEG', alpha=0.8)
-        ax.semilogy(freqs, synthetic_grand_avg, 'r-', linewidth=2, label='Synthetic EEG', alpha=0.8)
+        # Plot with error bands
+        ax.plot(freqs, real_group_avg, 'b-', linewidth=2, label=f'Real EEG (n={len(real_paths)})', alpha=0.8)
+        ax.fill_between(freqs, real_group_avg - real_group_std_avg, real_group_avg + real_group_std_avg, 
+                       color='blue', alpha=0.2)
+        
+        ax.plot(freqs, synthetic_group_avg, 'r-', linewidth=2, label=f'Synthetic EEG (n={len(synthetic_paths)})', alpha=0.8)
+        ax.fill_between(freqs, synthetic_group_avg - synthetic_group_std_avg, synthetic_group_avg + synthetic_group_std_avg, 
+                       color='red', alpha=0.2)
         
         ax.set_xlabel('Frequency (Hz)')
-        ax.set_ylabel('PSD (µV²/Hz)')
-        ax.set_title(f'Power Spectral Density Comparison - {condition}\nSubject ID: {sample_info["subject_id"]} (Grand average across all channels)')
+        ax.set_ylabel('Normalized PSD (0-1 scale)')
+        ax.set_title(f'Normalized Power Spectral Density - {condition}\n(Group comparison, grand average across all channels)')
         ax.legend()
         ax.grid(True, alpha=0.3)
+        ax.set_ylim(0, 1)  # Since we normalized to 0-1
         
-        psd_comparison_path = os.path.join(condition_output_dir, f'psd_comparison_plot_{condition}_subject_{sample_info["subject_id"]}.png')
+        psd_comparison_path = os.path.join(condition_output_dir, f'normalized_psd_comparison_{condition}.png')
         fig_psd.savefig(psd_comparison_path, dpi=300, bbox_inches='tight')
-        print(f"Saved PSD comparison plot to {psd_comparison_path}")
+        print(f"Saved normalized PSD comparison plot to {psd_comparison_path}")
         
         # Save results
         results = {
@@ -603,16 +652,16 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
             'cluster_info': cluster_info,
             'freqs': freqs,
             'channels': channels,
-            'real_psds': real_psds,
-            'synthetic_psds': synthetic_psds,
             'condition': condition,
-            'subject_id': sample_info['subject_id'],
-            'sample_info': sample_info
+            'n_real_subjects': len(real_paths),
+            'n_synthetic_subjects': len(synthetic_paths),
+            'real_group_avg_psd': real_group_avg,
+            'synthetic_group_avg_psd': synthetic_group_avg
         }
         
-        results_path = os.path.join(condition_output_dir, f'statistical_results_{condition}_subject_{sample_info["subject_id"]}.npz')
+        results_path = os.path.join(condition_output_dir, f'group_statistical_results_{condition}.npz')
         np.savez(results_path, **{k: v for k, v in results.items() if not isinstance(v, dict)})
-        print(f"Saved statistical results to {results_path}")
+        print(f"Saved group statistical results to {results_path}")
         
         all_results[condition] = results
         
@@ -620,18 +669,18 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
     
     # Create summary comparison across all conditions
     print(f"\n{'='*60}")
-    print("CREATING SUMMARY COMPARISON")
+    print("CREATING GROUP SUMMARY COMPARISON")
     print(f"{'='*60}")
     
-    create_summary_comparison(all_results, output_dir)
+    create_group_summary_comparison(all_results, output_dir)
     
-    print(f"\nAnalysis complete! Check the '{output_dir}' directory for outputs.")
+    print(f"\nGroup analysis complete! Check the '{output_dir}' directory for outputs.")
     print(f"Individual condition results are in subdirectories: {list(all_results.keys())}")
     
     return all_results
 
-def create_summary_comparison(all_results, output_dir):
-    """Create a summary comparison plot across all conditions."""
+def create_group_summary_comparison(all_results, output_dir):
+    """Create a summary comparison plot across all conditions for group analysis."""
     
     if not all_results:
         print("No results to summarize")
@@ -642,27 +691,26 @@ def create_summary_comparison(all_results, output_dir):
     if len(all_results) == 1:
         axes = axes.reshape(1, -1)
     
-    fig.suptitle('Summary: PSD Comparisons Across Conditions (Matched Subjects)', fontsize=16, fontweight='bold')
+    fig.suptitle('Group Summary: Normalized PSD Comparisons Across Conditions', fontsize=16, fontweight='bold')
     
     for idx, (condition, results) in enumerate(all_results.items()):
         freqs = results['freqs']
-        real_psds = results['real_psds']
-        synthetic_psds = results['synthetic_psds']
+        real_group_avg = results['real_group_avg_psd']
+        synthetic_group_avg = results['synthetic_group_avg_psd']
         significant_clusters = results['significant_clusters']
-        subject_id = results['subject_id']
+        n_real = results['n_real_subjects']
+        n_synthetic = results['n_synthetic_subjects']
         
-        # PSD comparison
+        # Normalized PSD comparison
         ax1 = axes[idx, 0]
-        real_psd_avg = np.mean(real_psds, axis=(0, 1))  # Average across epochs and channels
-        synthetic_psd_avg = np.mean(synthetic_psds, axis=(0, 1))
-        
-        ax1.semilogy(freqs, real_psd_avg, 'b-', linewidth=2, label='Real EEG', alpha=0.8)
-        ax1.semilogy(freqs, synthetic_psd_avg, 'r-', linewidth=2, label='Synthetic EEG', alpha=0.8)
+        ax1.plot(freqs, real_group_avg, 'b-', linewidth=2, label=f'Real EEG (n={n_real})', alpha=0.8)
+        ax1.plot(freqs, synthetic_group_avg, 'r-', linewidth=2, label=f'Synthetic EEG (n={n_synthetic})', alpha=0.8)
         ax1.set_xlabel('Frequency (Hz)')
-        ax1.set_ylabel('PSD (µV²/Hz)')
-        ax1.set_title(f'{condition} - Subject {subject_id}')
+        ax1.set_ylabel('Normalized PSD (0-1)')
+        ax1.set_title(f'{condition} - Group Comparison')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
+        ax1.set_ylim(0, 1)
         
         # Significance heatmap
         ax2 = axes[idx, 1]
@@ -690,9 +738,9 @@ def create_summary_comparison(all_results, output_dir):
     
     plt.tight_layout()
     
-    summary_path = os.path.join(output_dir, 'summary_comparison_matched_subjects.png')
+    summary_path = os.path.join(output_dir, 'group_summary_comparison.png')
     fig.savefig(summary_path, dpi=300, bbox_inches='tight')
-    print(f"Saved summary comparison to {summary_path}")
+    print(f"Saved group summary comparison to {summary_path}")
     
     plt.close()
 
@@ -700,14 +748,14 @@ def create_summary_comparison(all_results, output_dir):
 if __name__ == "__main__":
     # Example paths - replace with your actual file paths
     real_data_path = 'dataset/CAUEEG2'
-    synthetic_data_path = 'dataset/SYNTH-CAUEEG2-NORMALIZED'
+    synthetic_data_path = 'dataset/DM_NO_SPEC'
     
-    # Run complete analysis
-    results = run_complete_psd_analysis(
+    # Run complete group-level analysis
+    results = run_group_psd_analysis(
         real_dataset_folder=real_data_path,
         synthetic_dataset_folder=synthetic_data_path,
         conditions=['HC', 'MCI', 'Dementia'],
-        output_dir='images/statistical_analysis_matched_subjects_SYNTH-CAUEEG2-NORMALIZED'
+        output_dir='images/group_statistical_analysis_DM_NO_SPEC'
     )
     
-    print("\nAnalysis complete! Check the output directory for results.")
+    print("\nGroup analysis complete! Check the output directory for results.")
