@@ -37,7 +37,7 @@ fi
 # CONFIGURATION - CHANGE BASE PATHS HERE
 # =====================================
 # Base data paths - the percentage will be automatically inserted
-BASE_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/dm_norm_fix_no_spec_ready_datasets"
+BASE_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ftsurrogate_ready_datasets"
 
 # Construct training data directory with percentage
 DATA_DIR="$BASE_DATA_DIR/train_augmented_${PERCENTAGE}pct"
@@ -67,9 +67,9 @@ echo "  Training: $DATA_DIR"
 echo "  Testing: $TEST_DATA_DIR"
 
 # Set the combination you want to run (True/False)
-SHUFFLE=true
+SHUFFLE=false
 SHUFFLE_FIRST_EPOCH=false
-RANDOMIZE_EPOCHS=false
+RANDOMIZE_EPOCHS=true
 
 # Bootstrap configuration
 N_BOOTSTRAP=10                    # Number of bootstrap samples
