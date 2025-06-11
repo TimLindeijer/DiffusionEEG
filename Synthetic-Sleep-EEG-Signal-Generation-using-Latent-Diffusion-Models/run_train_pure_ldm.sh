@@ -2,8 +2,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=48:00:00
-#SBATCH --job-name=dm_spec_min_1
-#SBATCH --output=outputs/dm_caueeg2_spec_min_1_%j.out
+#SBATCH --job-name=dm_spec_min_2
+#SBATCH --output=outputs/dm_caueeg2_spec_min_2_%j.out
 #SBATCH --signal=B:USR1@300
 #SBATCH --requeue
 

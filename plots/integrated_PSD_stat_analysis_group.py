@@ -895,7 +895,7 @@ def create_group_summary_comparison(all_results, output_dir):
 if __name__ == "__main__":
     # Example paths - replace with your actual file paths
     real_data_path = 'dataset/CAUEEG2'
-    synthetic_data_path = 'dataset/LDM_PSD_Normalized_FIX'
+    synthetic_data_path = 'dataset/PURE_LDM_PSD_Normalized'
     
     # Run complete group-level analysis with robust normalization (recommended)
     # This uses 5th-95th percentiles for normalization, giving better range utilization
@@ -903,7 +903,7 @@ if __name__ == "__main__":
         real_dataset_folder=real_data_path,
         synthetic_dataset_folder=synthetic_data_path,
         conditions=['HC', 'MCI', 'Dementia'],
-        output_dir='images/group_statistical_analysis_robust_normalized_LDM_PSD_Normalized_FIX',
+        output_dir='images/group_statistical_analysis_robust_normalized_PURE_LDM_PSD_Normalized',
         normalization_method='robust'  # Options: 'global', 'robust', 'percentile'
     )
     
