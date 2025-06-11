@@ -9,7 +9,7 @@
 # CONFIGURATION - CHANGE THESE VALUES
 # =====================================
 # Set the combination you want to run (True/False)
-SHUFFLE=true
+SHUFFLE=false
 SHUFFLE_FIRST_EPOCH=false
 RANDOMIZE_EPOCHS=true
 

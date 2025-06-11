@@ -120,7 +120,7 @@ mkdir -p $OUTPUT_DIR
 
 # Create run name with auto-generated dataset name
 # Format: bootstrap_{DATASET_NAME}_{COMBINATION}_{N_BOOTSTRAP}runs_{TIMESTAMP}
-RUN_NAME="bootstrap_${DATASET_NAME}_${COMBINATION}_${N_BOOTSTRAP}runs_$(date +%Y%m%d_%H%M%S)"
+RUN_NAME="bootstrap2_${DATASET_NAME}_${COMBINATION}_${N_BOOTSTRAP}runs_$(date +%Y%m%d_%H%M%S)"
 
 # Activate environment (adjust based on your system)
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
