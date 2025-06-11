@@ -18,10 +18,11 @@ cd Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models
 # Can balance to max, mean or to a specific number
 python src/dataset_creation/balance_dataset.py \
   --genuine_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
-  --synthetic_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/DM_NO_SPEC \
-  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/dm_no_spec_balanced_datasets \
+  --synthetic_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2_FTSurrogate \
+  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/ftsurrogate_balanced_datasets \
   --test_size 0.2 \
   --stratify \
-  --balance_to max
+  --balance_to max \
+  --dataset_type augmented  # Add this line
 
 echo "Job finished at $(date)"
