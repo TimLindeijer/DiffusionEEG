@@ -29,15 +29,15 @@ RANDOMIZE_STR=$([ "$RANDOMIZE_EPOCHS" = true ] && echo "T" || echo "F")
 COMBINATION="${SHUFFLE_STR}${SHUFFLE_FIRST_STR}${RANDOMIZE_STR}"
 
 # Set paths
-DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_ready_datasets/train_genuine"
-TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_ready_datasets/test_genuine"
+DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ftsurrogate_balanced_datasets/train_balanced"
+TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ftsurrogate_balanced_datasets/test_genuine"
 
 # Create output directory name with combination and bootstrap info
-OUTPUT_DIR="results/bootstrap_mlr_gen_shuffle_${COMBINATION}_${N_BOOTSTRAP}runs"
+OUTPUT_DIR="results/bootstrap_mlr_dm_no_spec_balanced_${COMBINATION}_${N_BOOTSTRAP}runs"
 mkdir -p $OUTPUT_DIR
 
 # Create run name with combination, bootstrap info, and timestamp
-RUN_NAME="BOOTSTRAP_MLR_GENUINE_${COMBINATION}_${N_BOOTSTRAP}runs_$(date +%Y%m%d_%H%M%S)"
+RUN_NAME="BOOTSTRAP_MLR_DM_NO_SPEC_${COMBINATION}_${N_BOOTSTRAP}runs_$(date +%Y%m%d_%H%M%S)"
 
 # Activate environment (adjust based on your system)
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
