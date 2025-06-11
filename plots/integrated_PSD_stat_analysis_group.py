@@ -38,32 +38,112 @@ def load_and_preprocess_data(path, sfreq=200):
     
     return data, n_epochs, n_channels, n_times
 
-def normalize_psd_to_01(psd_data):
+def create_beautiful_psd_plot(freqs, group_mean, group_std, title, color='blue', figsize=(12, 6), normalized=True, norm_method='robust'):
     """
-    Normalize PSD data to 0-1 scale.
+    Create a beautiful PSD plot in the style of the provided image.
+    
+    Parameters:
+    -----------
+    freqs : array
+        Frequency values
+    group_mean : array
+        Mean PSD values
+    group_std : array
+        Standard deviation of PSD values
+    title : str
+        Plot title
+    color : str
+        Color for the plot
+    figsize : tuple
+        Figure size
+    normalized : bool
+        Whether the data is normalized to 0-1 scale
+    norm_method : str
+        Normalization method used
+        
+    Returns:
+    --------
+    fig : matplotlib figure
+    """
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    # Create shaded area for variability
+    ax.fill_between(freqs, group_mean - group_std, group_mean + group_std, 
+                   color=color, alpha=0.3, label='± 1 SD')
+    
+    # Bold center line for mean
+    ax.plot(freqs, group_mean, color=color, linewidth=3, label='Mean', alpha=0.9)
+    
+    # Formatting to match the provided image
+    ax.set_xlabel('Frequency (Hz)', fontsize=12, fontweight='bold')
+    if normalized:
+        ax.set_ylabel(f'Normalized Power (0-1, {norm_method})', fontsize=12, fontweight='bold')
+        ax.set_ylim(0, 1)
+    else:
+        ax.set_ylabel('Power (dB µV²/Hz)', fontsize=12, fontweight='bold')
+    
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    
+    # Clean appearance like the provided image
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_linewidth(1.5)
+    ax.spines['bottom'].set_linewidth(1.5)
+    
+    # Set frequency range
+    ax.set_xlim(freqs[0], freqs[-1])
+    
+    plt.tight_layout()
+    return fig
+
+def normalize_psd_to_01(psd_data, method='robust'):
+    """
+    Normalize PSD data to 0-1 scale using different methods.
     
     Parameters:
     -----------
     psd_data : array, shape (n_epochs, n_channels, n_freqs)
         PSD data
+    method : str
+        Normalization method: 'global', 'robust', or 'percentile'
         
     Returns:
     --------
     normalized_psd : array, same shape as input
         PSD data normalized to 0-1 range
     """
-    # Find global min and max across all epochs, channels, and frequencies
-    global_min = np.min(psd_data)
-    global_max = np.max(psd_data)
+    if method == 'global':
+        # Original global min-max normalization
+        global_min = np.min(psd_data)
+        global_max = np.max(psd_data)
+        normalized_psd = (psd_data - global_min) / (global_max - global_min)
+        print(f"Global normalization: {global_min:.6f} to {global_max:.6f} -> 0.0 to 1.0")
+        
+    elif method == 'robust':
+        # Use 5th and 95th percentiles to avoid outlier compression
+        p5 = np.percentile(psd_data, 5)
+        p95 = np.percentile(psd_data, 95)
+        normalized_psd = (psd_data - p5) / (p95 - p5)
+        # Clip to 0-1 range to handle values outside percentile range
+        normalized_psd = np.clip(normalized_psd, 0, 1)
+        print(f"Robust normalization: P5={p5:.6f} to P95={p95:.6f} -> 0.0 to 1.0")
+        
+    elif method == 'percentile':
+        # Use 10th and 90th percentiles for even more robust normalization
+        p10 = np.percentile(psd_data, 10)
+        p90 = np.percentile(psd_data, 90)
+        normalized_psd = (psd_data - p10) / (p90 - p10)
+        # Clip to 0-1 range
+        normalized_psd = np.clip(normalized_psd, 0, 1)
+        print(f"Percentile normalization: P10={p10:.6f} to P90={p90:.6f} -> 0.0 to 1.0")
     
-    # Normalize to 0-1 scale
-    normalized_psd = (psd_data - global_min) / (global_max - global_min)
-    
-    print(f"PSD normalization: {global_min:.6f} to {global_max:.6f} -> 0.0 to 1.0")
+    else:
+        raise ValueError(f"Unknown normalization method: {method}")
     
     return normalized_psd
 
-def calculate_psd_for_statistical_analysis(data, sfreq, fmin=1, fmax=30, nperseg=None, normalize=True):
+def calculate_psd_for_statistical_analysis(data, sfreq, fmin=1, fmax=30, nperseg=None, normalize=True, norm_method='robust'):
     """
     Calculate PSD data in format needed for statistical analysis.
     
@@ -79,6 +159,8 @@ def calculate_psd_for_statistical_analysis(data, sfreq, fmin=1, fmax=30, nperseg
         Length of each segment for Welch's method
     normalize : bool
         Whether to normalize PSDs to 0-1 scale
+    norm_method : str
+        Normalization method: 'global', 'robust', or 'percentile'
         
     Returns:
     --------
@@ -113,7 +195,7 @@ def calculate_psd_for_statistical_analysis(data, sfreq, fmin=1, fmax=30, nperseg
     
     # Normalize PSDs to 0-1 scale if requested
     if normalize:
-        psd_data = normalize_psd_to_01(psd_data)
+        psd_data = normalize_psd_to_01(psd_data, method=norm_method)
     
     return psd_data, freqs
 
@@ -305,7 +387,7 @@ Max: {np.max(effect_sizes):.4f}
 Mean: {np.mean(effect_sizes):.4f}
 Abs Max: {max_abs_effect:.4f}
 
-Note: PSDs normalized to 0-1 scale
+Note: PSDs normalized using robust method
 Effect sizes centered at 0
 """
         
@@ -491,7 +573,8 @@ def load_all_subjects_by_condition(real_dataset_folder, synthetic_dataset_folder
     return grouped_samples
 
 def run_group_psd_analysis(real_dataset_folder, synthetic_dataset_folder, output_dir='group_statistical_analysis', 
-                          conditions=['HC', 'MCI', 'Dementia'], sfreq=200, fmin=1, fmax=30, n_permutations=1000):
+                          conditions=['HC', 'MCI', 'Dementia'], sfreq=200, fmin=1, fmax=30, n_permutations=1000,
+                          normalization_method='robust'):
     """
     Run complete group-level PSD statistical analysis comparing real and synthetic EEG data.
     
@@ -511,6 +594,9 @@ def run_group_psd_analysis(real_dataset_folder, synthetic_dataset_folder, output
         Frequency range for analysis
     n_permutations : int
         Number of permutations for statistical tests
+    normalization_method : str
+        Normalization method: 'global', 'robust', or 'percentile'
+        'robust' uses 5th-95th percentiles, 'percentile' uses 10th-90th percentiles
     """
     
     # Create output directory
@@ -554,7 +640,8 @@ def run_group_psd_analysis(real_dataset_folder, synthetic_dataset_folder, output
         for i, path in enumerate(real_paths):
             print(f"  Loading real subject {i+1}/{len(real_paths)}: {os.path.basename(path)}")
             data, _, n_channels, _ = load_and_preprocess_data(path, sfreq)
-            psds, freqs = calculate_psd_for_statistical_analysis(data, sfreq, fmin, fmax, normalize=True)
+            psds, freqs = calculate_psd_for_statistical_analysis(data, sfreq, fmin, fmax, 
+                                                               normalize=True, norm_method=normalization_method)
             real_all_psds.append(psds)
         
         # Load all synthetic subjects
@@ -563,7 +650,8 @@ def run_group_psd_analysis(real_dataset_folder, synthetic_dataset_folder, output
         for i, path in enumerate(synthetic_paths):
             print(f"  Loading synthetic subject {i+1}/{len(synthetic_paths)}: {os.path.basename(path)}")
             data, _, _, _ = load_and_preprocess_data(path, sfreq)
-            psds, _ = calculate_psd_for_statistical_analysis(data, sfreq, fmin, fmax, normalize=True)
+            psds, _ = calculate_psd_for_statistical_analysis(data, sfreq, fmin, fmax, 
+                                                           normalize=True, norm_method=normalization_method)
             synthetic_all_psds.append(psds)
         
         # Convert to numpy arrays and reshape for group analysis
@@ -610,39 +698,81 @@ def run_group_psd_analysis(real_dataset_folder, synthetic_dataset_folder, output
         print(f"\n{condition} GROUP CLUSTER RESULTS:")
         comparator.print_cluster_results(cluster_info, freqs)
         
-        # Create normalized PSD comparison plot
+        # Create normalized PSD comparison plot in the style of the provided image
         print("Creating normalized PSD comparison plot...")
         fig_psd, ax = plt.subplots(figsize=(12, 8))
         
-        # Average PSDs across epochs and subjects for each group
-        real_group_avg = np.mean(real_group_data, axis=(0, 1))  # Average across epochs and channels
-        synthetic_group_avg = np.mean(synthetic_group_data, axis=(0, 1))
+        # Calculate PSDs averaged across channels for each subject, then get group statistics
+        real_subject_psds = []  # PSD for each subject (averaged across channels)
+        for subject_psd in real_all_psds:
+            subject_avg = np.mean(subject_psd, axis=(0, 1))  # Average across epochs and channels
+            real_subject_psds.append(subject_avg)
+        real_subject_psds = np.array(real_subject_psds)
         
-        # Calculate standard error
-        real_group_std = np.std(np.mean(real_group_data, axis=1), axis=0) / np.sqrt(real_group_data.shape[0])
-        synthetic_group_std = np.std(np.mean(synthetic_group_data, axis=1), axis=0) / np.sqrt(synthetic_group_data.shape[0])
-        real_group_std_avg = np.mean(real_group_std, axis=0)
-        synthetic_group_std_avg = np.mean(synthetic_group_std, axis=0)
+        synthetic_subject_psds = []
+        for subject_psd in synthetic_all_psds:
+            subject_avg = np.mean(subject_psd, axis=(0, 1))  # Average across epochs and channels
+            synthetic_subject_psds.append(subject_avg)
+        synthetic_subject_psds = np.array(synthetic_subject_psds)
         
-        # Plot with error bands
-        ax.plot(freqs, real_group_avg, 'b-', linewidth=2, label=f'Real EEG (n={len(real_paths)})', alpha=0.8)
-        ax.fill_between(freqs, real_group_avg - real_group_std_avg, real_group_avg + real_group_std_avg, 
-                       color='blue', alpha=0.2)
+        # Calculate group mean and standard deviation
+        real_group_mean = np.mean(real_subject_psds, axis=0)
+        real_group_std = np.std(real_subject_psds, axis=0)
         
-        ax.plot(freqs, synthetic_group_avg, 'r-', linewidth=2, label=f'Synthetic EEG (n={len(synthetic_paths)})', alpha=0.8)
-        ax.fill_between(freqs, synthetic_group_avg - synthetic_group_std_avg, synthetic_group_avg + synthetic_group_std_avg, 
-                       color='red', alpha=0.2)
+        synthetic_group_mean = np.mean(synthetic_subject_psds, axis=0)
+        synthetic_group_std = np.std(synthetic_subject_psds, axis=0)
         
-        ax.set_xlabel('Frequency (Hz)')
-        ax.set_ylabel('Normalized PSD (0-1 scale)')
-        ax.set_title(f'Normalized Power Spectral Density - {condition}\n(Group comparison, grand average across all channels)')
-        ax.legend()
+        # Plot with bold center line and shaded area (like the provided image)
+        # Real EEG
+        ax.fill_between(freqs, real_group_mean - real_group_std, real_group_mean + real_group_std, 
+                       color='blue', alpha=0.3, label=f'Real EEG spread (n={len(real_paths)})')
+        ax.plot(freqs, real_group_mean, 'b-', linewidth=3, label=f'Real EEG mean', alpha=0.9)
+        
+        # Synthetic EEG  
+        ax.fill_between(freqs, synthetic_group_mean - synthetic_group_std, synthetic_group_mean + synthetic_group_std, 
+                       color='red', alpha=0.3, label=f'Synthetic EEG spread (n={len(synthetic_paths)})')
+        ax.plot(freqs, synthetic_group_mean, 'r-', linewidth=3, label=f'Synthetic EEG mean', alpha=0.9)
+        
+        ax.set_xlabel('Frequency (Hz)', fontsize=12)
+        ax.set_ylabel('Normalized PSD (0-1 scale)', fontsize=12)
+        ax.set_title(f'Normalized Power Spectral Density - {condition}\n(Group comparison, grand average across all channels)', fontsize=14, fontweight='bold')
+        ax.legend(fontsize=10)
         ax.grid(True, alpha=0.3)
         ax.set_ylim(0, 1)  # Since we normalized to 0-1
+        
+        # Make the plot look more like the provided image
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
         
         psd_comparison_path = os.path.join(condition_output_dir, f'normalized_psd_comparison_{condition}.png')
         fig_psd.savefig(psd_comparison_path, dpi=300, bbox_inches='tight')
         print(f"Saved normalized PSD comparison plot to {psd_comparison_path}")
+        
+        # Create individual beautiful plots for each group (like the provided image)
+        print("Creating individual beautiful PSD plots...")
+        
+        # Real EEG plot
+        fig_real = create_beautiful_psd_plot(
+            freqs, real_group_mean, real_group_std, 
+            f'Real EEG - {condition} (n={len(real_paths)})', 
+            color='blue', normalized=True, norm_method=normalization_method
+        )
+        real_plot_path = os.path.join(condition_output_dir, f'real_eeg_psd_{condition}.png')
+        fig_real.savefig(real_plot_path, dpi=300, bbox_inches='tight')
+        print(f"Saved real EEG plot to {real_plot_path}")
+        
+        # Synthetic EEG plot
+        fig_synthetic = create_beautiful_psd_plot(
+            freqs, synthetic_group_mean, synthetic_group_std, 
+            f'Synthetic EEG - {condition} (n={len(synthetic_paths)})', 
+            color='red', normalized=True, norm_method=normalization_method
+        )
+        synthetic_plot_path = os.path.join(condition_output_dir, f'synthetic_eeg_psd_{condition}.png')
+        fig_synthetic.savefig(synthetic_plot_path, dpi=300, bbox_inches='tight')
+        print(f"Saved synthetic EEG plot to {synthetic_plot_path}")
+        
+        plt.close(fig_real)
+        plt.close(fig_synthetic)
         
         # Save results
         results = {
@@ -655,8 +785,10 @@ def run_group_psd_analysis(real_dataset_folder, synthetic_dataset_folder, output
             'condition': condition,
             'n_real_subjects': len(real_paths),
             'n_synthetic_subjects': len(synthetic_paths),
-            'real_group_avg_psd': real_group_avg,
-            'synthetic_group_avg_psd': synthetic_group_avg
+            'real_group_mean': real_group_mean,
+            'real_group_std': real_group_std,
+            'synthetic_group_mean': synthetic_group_mean,
+            'synthetic_group_std': synthetic_group_std
         }
         
         results_path = os.path.join(condition_output_dir, f'group_statistical_results_{condition}.npz')
@@ -695,22 +827,37 @@ def create_group_summary_comparison(all_results, output_dir):
     
     for idx, (condition, results) in enumerate(all_results.items()):
         freqs = results['freqs']
-        real_group_avg = results['real_group_avg_psd']
-        synthetic_group_avg = results['synthetic_group_avg_psd']
+        real_group_mean = results['real_group_mean']
+        real_group_std = results['real_group_std']
+        synthetic_group_mean = results['synthetic_group_mean']
+        synthetic_group_std = results['synthetic_group_std']
         significant_clusters = results['significant_clusters']
         n_real = results['n_real_subjects']
         n_synthetic = results['n_synthetic_subjects']
         
-        # Normalized PSD comparison
+        # Normalized PSD comparison with bold center line and shaded area
         ax1 = axes[idx, 0]
-        ax1.plot(freqs, real_group_avg, 'b-', linewidth=2, label=f'Real EEG (n={n_real})', alpha=0.8)
-        ax1.plot(freqs, synthetic_group_avg, 'r-', linewidth=2, label=f'Synthetic EEG (n={n_synthetic})', alpha=0.8)
+        
+        # Real EEG
+        ax1.fill_between(freqs, real_group_mean - real_group_std, real_group_mean + real_group_std, 
+                        color='blue', alpha=0.3)
+        ax1.plot(freqs, real_group_mean, 'b-', linewidth=3, label=f'Real EEG (n={n_real})', alpha=0.9)
+        
+        # Synthetic EEG
+        ax1.fill_between(freqs, synthetic_group_mean - synthetic_group_std, synthetic_group_mean + synthetic_group_std, 
+                        color='red', alpha=0.3)
+        ax1.plot(freqs, synthetic_group_mean, 'r-', linewidth=3, label=f'Synthetic EEG (n={n_synthetic})', alpha=0.9)
+        
         ax1.set_xlabel('Frequency (Hz)')
         ax1.set_ylabel('Normalized PSD (0-1)')
         ax1.set_title(f'{condition} - Group Comparison')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
         ax1.set_ylim(0, 1)
+        
+        # Clean up the plot appearance
+        ax1.spines['top'].set_visible(False)
+        ax1.spines['right'].set_visible(False)
         
         # Significance heatmap
         ax2 = axes[idx, 1]
@@ -748,14 +895,25 @@ def create_group_summary_comparison(all_results, output_dir):
 if __name__ == "__main__":
     # Example paths - replace with your actual file paths
     real_data_path = 'dataset/CAUEEG2'
-    synthetic_data_path = 'dataset/DM_NO_SPEC'
+    synthetic_data_path = 'dataset/LDM_PSD_Normalized_FIX'
     
-    # Run complete group-level analysis
+    # Run complete group-level analysis with robust normalization (recommended)
+    # This uses 5th-95th percentiles for normalization, giving better range utilization
     results = run_group_psd_analysis(
         real_dataset_folder=real_data_path,
         synthetic_dataset_folder=synthetic_data_path,
         conditions=['HC', 'MCI', 'Dementia'],
-        output_dir='images/group_statistical_analysis_DM_NO_SPEC'
+        output_dir='images/group_statistical_analysis_robust_normalized_LDM_PSD_Normalized_FIX',
+        normalization_method='robust'  # Options: 'global', 'robust', 'percentile'
     )
+    
+    # Alternative: If you want even more range utilization, try 'percentile' method
+    # results = run_group_psd_analysis(
+    #     real_dataset_folder=real_data_path,
+    #     synthetic_dataset_folder=synthetic_data_path,
+    #     conditions=['HC', 'MCI', 'Dementia'],
+    #     output_dir='images/group_statistical_analysis_percentile_normalized',
+    #     normalization_method='percentile'  # Uses 10th-90th percentiles
+    # )
     
     print("\nGroup analysis complete! Check the output directory for results.")
