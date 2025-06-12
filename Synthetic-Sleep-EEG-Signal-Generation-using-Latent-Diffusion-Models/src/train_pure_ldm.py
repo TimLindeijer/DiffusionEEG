@@ -215,7 +215,7 @@ def main(args):
         run_dir=run_dir,
         inferer=inferer,
         spectral_loss=spectral_loss,
-        spectral_weight=1E-1
+        spectral_weight=1E-6
     )
 
     log_mlflow(

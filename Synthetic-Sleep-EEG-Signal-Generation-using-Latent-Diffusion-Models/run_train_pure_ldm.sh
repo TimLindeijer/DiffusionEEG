@@ -56,7 +56,7 @@ python src/train_pure_ldm.py \
     --path_pre_processed /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
     --label_filter $CONDITION \
     --config_file /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_dm.yaml \
-    --spe spectral
+
 
 # Record completion
 echo "Job completed/interrupted at $(date)"
