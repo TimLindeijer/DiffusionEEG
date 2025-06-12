@@ -340,7 +340,7 @@ def create_supervisor_requested_figure(all_results, freqs, channels, output_dir)
             
             # Optional: Add filled contours for better visibility
             ax.contourf(significant_clusters.astype(float), levels=[0.5, 1.5], 
-                       colors=['none'], hatches=['///'], alpha=0.3)
+                       colors=['none'], hatches=['///'], alpha=0.15)
         
         # Set ticks and labels
         ax.set_xticks(freq_ticks)
@@ -543,14 +543,14 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
 if __name__ == "__main__":
     # Specify dataset folders
     real_dataset_folder = '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2'
-    synthetic_dataset_folder = '/home/stud/timlin/bhome/DiffusionEEG/dataset/DM_NO_SPEC'
+    synthetic_dataset_folder = '/home/stud/timlin/bhome/DiffusionEEG/dataset/SYNTH-CAUEEG2-NORMALIZED'
     
     # Run complete analysis
     results, freqs, channels = run_complete_psd_analysis(
         real_dataset_folder=real_dataset_folder,
         synthetic_dataset_folder=synthetic_dataset_folder,
         conditions=['HC', 'MCI', 'Dementia'],
-        output_dir='images/statistical_analysis_full_datasets_DM_NO_SPEC',
+        output_dir='images/statistical_analysis_full_datasets_SYNTH-CAUEEG2-NORMALIZED',
         sfreq=200,
         fmin=1,
         fmax=30,

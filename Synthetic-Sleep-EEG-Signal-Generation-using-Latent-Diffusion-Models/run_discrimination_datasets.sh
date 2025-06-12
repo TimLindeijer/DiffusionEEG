@@ -18,7 +18,7 @@ cd Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models
   
 python src/dataset_creation/discrimination_datasets.py \
   --genuine_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
-  --comparison_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized_FIX \
+  --comparison_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/DM_NO_SPEC \
   --comparison_type synthetic \
-  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_discrimination_synthetic \
+  --output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/dm_no_spec_discrimination_synthetic \
   --val_size 0.2
