@@ -5,7 +5,7 @@ import os
 from scipy import signal
 
 # File path
-path = 'dataset/discrimination_ftsurrogate/all_augmented_train/Feature/feature_02.npy'
+path = 'dataset/CAUEEG2/Feature/feature_1009.npy'
 
 # Output directory
 output_dir = 'images'
@@ -89,15 +89,15 @@ def plot_psd_scipy(data, sfreq, fmin=1, fmax=30):
 # Plot PSD using scipy (more robust method)
 print("Computing and plotting PSD using scipy...")
 psd_fig = plot_psd_scipy(data, sfreq=sfreq, fmin=1, fmax=30)
-psd_fig.savefig(os.path.join(output_dir, 'augmentedeeg_psd_all_channels_feature01_1000TP.png'))
-print(f"Saved PSD plot to {os.path.join(output_dir, 'augmentedeeg_psd_all_channels_feature01_1000TP.png')}")
+psd_fig.savefig(os.path.join(output_dir, 'test.png'))
+print(f"Saved PSD plot to {os.path.join(output_dir, 'test2.png')}")
 
 # Try MNE's method as a fallback
 try:
     print("Attempting MNE's PSD calculation...")
     # Use multitaper method instead of welch
     psd_mne_fig = epochs.compute_psd(method="multitaper", fmin=1, fmax=30).plot(average=True)
-    psd_mne_fig.savefig(os.path.join(output_dir, 'augmentedeeg_psd_mne_method.png'))
+    psd_mne_fig.savefig(os.path.join(output_dir, 'test2.png'))
     print(f"Saved MNE PSD plot")
 except Exception as e:
     print(f"MNE PSD calculation failed: {e}")
@@ -122,7 +122,7 @@ else:
     ax.set_xlabel("Time (s)")
 
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'augmentedeeg_raw_sample_feat01_1000TP.png'))
+plt.savefig(os.path.join(output_dir, 'test2_raw.png'))
 print(f"Saved raw data plot")
 
 print("All plots generated successfully!")

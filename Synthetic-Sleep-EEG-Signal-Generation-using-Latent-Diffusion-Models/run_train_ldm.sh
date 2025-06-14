@@ -2,10 +2,10 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=48:00:00
-#SBATCH --job-name=ldm_hc
-#SBATCH --output=outputs/ldm_caueeg_hc_4ch.out
 #SBATCH --signal=B:USR1@300
 #SBATCH --requeue
+#SBATCH --job-name=ldm
+#SBATCH --output=outputs/ldm_caueeg_%j.out
 
 # Signal handling for automatic requeue
 _requeue_() {
@@ -26,24 +26,35 @@ uenv verbose cuda-11.8.0 cudnn-11.x-8.7.0
 uenv miniconda3-py39
 conda activate ldm-eeg
 
-# echo "Updating PyTorch for A100 compatibility..."
-# pip uninstall -y torch torchvision torchaudio
-# pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 torchaudio==2.0.2+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
-
 cd Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models
 
 # Add run identifier to track job in logs
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-echo "Run ID: ${TIMESTAMP}, training LDM on Healthy Controls only"
 
-# Run the training script with HC filter
+# Set descriptive names for conditions
+if [ $# -eq 0 ]; then
+    echo "Error: No condition specified. Usage: sbatch $0 <condition>"
+    echo "Available conditions: hc, mci, dementia"
+    exit 1
+fi
+
+CONDITION=$1
+
+# Validate condition
+if [[ ! "$CONDITION" =~ ^(hc|mci|dementia)$ ]]; then
+    echo "Error: Invalid condition '$CONDITION'. Must be one of: hc, mci, dementia"
+    exit 1
+fi
+
+echo "Run ID: ${TIMESTAMP}, training on ${CONDITION} only"
+# Run the training script with specified condition filter
 python src/train_ldm.py \
     --dataset caueeg2 \
     --path_pre_processed /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
-    --label_filter hc \
+    --label_filter $CONDITION \
     --num_channels "[4, 8, 16, 32]" \
     --latent_channels 4 \
-    --best_model_path "/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/aekl_eeg_4channels_label_hc" \
+    --best_model_path "/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/aekl_eeg_4channels_no_spec_label_${CONDITION}" \
     --autoencoderkl_config_file_path "/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_encoder_eeg.yaml" \
     --config_file "/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_ldm.yaml"
 

@@ -1,14 +1,12 @@
 #!/usr/bin/env python
 """
-Create train/test splits from genuine data and balance the training set with synthetic data.
-This script:
-1. Splits genuine data into train/test sets (keeping test set 100% genuine)
-2. Balances the training set by adding synthetic data to make all classes equal in size
+Modified version to handle augmented datasets that only contain augmented samples
 """
 
 import os
 import argparse
 import numpy as np
+import pandas as pd
 import shutil
 from collections import defaultdict
 from pathlib import Path
@@ -22,7 +20,7 @@ def parse_args():
     parser.add_argument("--genuine_dataset", type=str, required=True,
                       help="Path to the genuine dataset directory")
     parser.add_argument("--synthetic_dataset", type=str, required=True,
-                      help="Path to the synthetic dataset directory")
+                      help="Path to the synthetic/augmented dataset directory")
     
     # Output directory
     parser.add_argument("--output_dir", type=str, required=True,
@@ -38,21 +36,100 @@ def parse_args():
     parser.add_argument("--balance_to", type=str, default="max",
                       help="Balance strategy: 'max' (to largest class), 'mean' (to mean size), or a number")
     
+    # Dataset type
+    parser.add_argument("--dataset_type", type=str, default="auto", 
+                      choices=["auto", "synthetic", "augmented"],
+                      help="Type of secondary dataset: synthetic (includes originals) or augmented (only augmented)")
+    
     # Generation parameters
     parser.add_argument("--seed", type=int, default=42,
                       help="Random seed for reproducibility")
     
     return parser.parse_args()
 
-def read_labels(label_path):
+def detect_dataset_type(dataset_path):
     """
-    Read label.npy file and parse the samples by category.
+    Detect if the dataset is synthetic (includes originals) or augmented (only augmented)
+    """
+    subject_mapping_path = os.path.join(dataset_path, "Label", "subject_mapping.csv")
     
-    Returns:
-        Dictionary mapping label (0, 1, 2) to list of feature file numbers
-        Full label array
+    if os.path.exists(subject_mapping_path):
+        try:
+            df = pd.read_csv(subject_mapping_path)
+            
+            # Check if there are entries marked as "Not present"
+            if 'file_in_output' in df.columns:
+                not_present_count = df['file_in_output'].str.contains('Not present', na=False).sum()
+                total_count = len(df)
+                
+                if not_present_count > total_count * 0.5:  # More than 50% not present
+                    print(f"Detected AUGMENTED dataset (only augmented samples present)")
+                    return "augmented"
+                else:
+                    print(f"Detected SYNTHETIC dataset (includes original samples)")
+                    return "synthetic"
+            
+        except Exception as e:
+            print(f"Warning: Could not read subject mapping: {e}")
+    
+    # Fallback: assume synthetic
+    print("Could not detect dataset type, assuming SYNTHETIC")
+    return "synthetic"
+
+def read_labels_augmented(label_path, subject_mapping_path):
     """
-    print(f"Reading labels from: {label_path}")
+    Read labels for augmented dataset, filtering out original references
+    """
+    print(f"Reading augmented labels from: {label_path}")
+    
+    # Load the labels
+    labels = np.load(label_path)
+    print(f"Loaded label file with shape: {labels.shape}")
+    
+    # Load subject mapping to filter out original references
+    if os.path.exists(subject_mapping_path):
+        df = pd.read_csv(subject_mapping_path)
+        print(f"Loaded subject mapping with {len(df)} entries")
+        
+        # Filter to only include entries that are present in the output
+        present_entries = df[~df['file_in_output'].str.contains('Not present', na=False)]
+        present_subject_ids = set(present_entries['subject_id'].values)
+        
+        print(f"Found {len(present_subject_ids)} subjects with actual files (excluding original references)")
+        
+        # Filter labels to only include present subjects
+        filtered_labels = []
+        for entry in labels:
+            subject_id = int(entry[1])
+            if subject_id in present_subject_ids:
+                filtered_labels.append(entry)
+        
+        filtered_labels = np.array(filtered_labels)
+        print(f"Filtered labels shape: {filtered_labels.shape}")
+        
+    else:
+        print("Warning: No subject mapping found, using all labels")
+        filtered_labels = labels
+    
+    # Group by label
+    label_to_features = defaultdict(list)
+    for entry in filtered_labels:
+        label = int(entry[0])  # First column is label
+        subject_id = int(entry[1])  # Second column is subject_id
+        label_to_features[label].append(subject_id)
+    
+    # Print summary
+    print(f"Augmented dataset summary:")
+    for label, features in label_to_features.items():
+        print(f"  Class {label}: {len(features)} augmented samples")
+    
+    return label_to_features, filtered_labels
+
+def read_labels_synthetic(label_path):
+    """
+    Original read_labels function for synthetic datasets
+    """
+    print(f"Reading synthetic labels from: {label_path}")
     
     # Load the labels
     labels = np.load(label_path)
@@ -66,17 +143,29 @@ def read_labels(label_path):
         label_to_features[label].append(subject_id)
     
     # Print summary
-    print(f"Found {len(label_to_features[0])} HC samples, " +
-          f"{len(label_to_features[1])} MCI samples, " +
-          f"{len(label_to_features[2])} Dementia samples")
+    print(f"Synthetic dataset summary:")
+    for label, features in label_to_features.items():
+        print(f"  Class {label}: {len(features)} samples")
     
     return label_to_features, labels
+
+def read_labels(label_path, dataset_type="synthetic", dataset_path=None):
+    """
+    Read labels based on dataset type
+    """
+    if dataset_type == "augmented":
+        subject_mapping_path = os.path.join(dataset_path, "Label", "subject_mapping.csv")
+        return read_labels_augmented(label_path, subject_mapping_path)
+    else:
+        return read_labels_synthetic(label_path)
 
 def copy_features(feature_ids, src_dir, dst_dir, prefix="feature_"):
     """Copy feature files with the given IDs from source to destination."""
     os.makedirs(dst_dir, exist_ok=True)
     
     copied_count = 0
+    missing_files = []
+    
     for feature_id in feature_ids:
         src_file = os.path.join(src_dir, f"{prefix}{feature_id:02d}.npy")
         dst_file = os.path.join(dst_dir, f"{prefix}{feature_id:02d}.npy")
@@ -85,25 +174,19 @@ def copy_features(feature_ids, src_dir, dst_dir, prefix="feature_"):
             shutil.copy2(src_file, dst_file)
             copied_count += 1
         else:
-            print(f"Warning: Source file not found: {src_file}")
+            missing_files.append(src_file)
+    
+    if missing_files:
+        print(f"Warning: {len(missing_files)} source files not found")
+        if len(missing_files) <= 5:
+            for f in missing_files:
+                print(f"  Missing: {f}")
     
     return copied_count
 
 def create_train_test_split(genuine_path, output_dir, test_size=0.2, stratify=True, seed=42):
     """
     Split genuine dataset into train and test sets.
-    
-    Args:
-        genuine_path: Path to genuine dataset
-        output_dir: Base path to save split datasets
-        test_size: Proportion of data to use for testing
-        stratify: Whether to stratify the split by class labels
-        seed: Random seed for reproducibility
-    
-    Returns:
-        Dictionary mapping labels to feature IDs for the training set
-        List of all feature IDs in the training set
-        Dictionary mapping labels to feature IDs for the test set
     """
     print(f"\n{'='*80}")
     print(f"Creating train/test split (test_size={test_size}, stratify={stratify})")
@@ -129,7 +212,7 @@ def create_train_test_split(genuine_path, output_dir, test_size=0.2, stratify=Tr
     
     # Read genuine labels
     genuine_label_path = os.path.join(genuine_path, "Label", "label.npy")
-    genuine_label_dict, genuine_labels = read_labels(genuine_label_path)
+    genuine_label_dict, genuine_labels = read_labels(genuine_label_path, "synthetic")
     
     # Create arrays for sklearn's train_test_split
     features = []
@@ -195,20 +278,12 @@ def create_train_test_split(genuine_path, output_dir, test_size=0.2, stratify=Tr
     return train_label_dict, features_train, test_label_dict
 
 def balance_training_set(genuine_train_dict, genuine_train_ids, synthetic_path, output_dir, 
-                        balance_to="max", seed=42):
+                        balance_to="max", dataset_type="synthetic", seed=42):
     """
-    Balance the training set with synthetic data.
-    
-    Args:
-        genuine_train_dict: Dictionary mapping labels to feature IDs for the genuine training set
-        genuine_train_ids: List of all feature IDs in the genuine training set
-        synthetic_path: Path to synthetic dataset
-        output_dir: Path to save the balanced training set
-        balance_to: Strategy for balancing - "max", "mean", or a specific number
-        seed: Random seed for reproducibility
+    Balance the training set with synthetic/augmented data.
     """
     print(f"\n{'='*80}")
-    print(f"Balancing training set with synthetic data (strategy: {balance_to})")
+    print(f"Balancing training set with {dataset_type} data (strategy: {balance_to})")
     print(f"{'='*80}")
     
     # Set random seed
@@ -220,9 +295,11 @@ def balance_training_set(genuine_train_dict, genuine_train_ids, synthetic_path, 
     os.makedirs(output_feature_dir, exist_ok=True)
     os.makedirs(output_label_dir, exist_ok=True)
     
-    # Read synthetic labels
+    # Read synthetic/augmented labels
     synthetic_label_path = os.path.join(synthetic_path, "Label", "label.npy")
-    synthetic_label_dict, synthetic_labels = read_labels(synthetic_label_path)
+    synthetic_label_dict, synthetic_labels = read_labels(
+        synthetic_label_path, dataset_type, synthetic_path
+    )
     
     # Determine target size for each class
     class_sizes = {label: len(ids) for label, ids in genuine_train_dict.items()}
@@ -246,14 +323,14 @@ def balance_training_set(genuine_train_dict, genuine_train_ids, synthetic_path, 
     for label in [0, 1, 2]:  # HC, MCI, Dementia
         genuine_count = class_sizes.get(label, 0)
         add_count = target_size - genuine_count
-        available_count = len(synthetic_label_dict[label])
+        available_count = len(synthetic_label_dict.get(label, []))
         
         if add_count > available_count:
             print(f"Warning: Need {add_count} samples for category {label}, but only {available_count} available")
             add_count = min(add_count, available_count)
         
         samples_to_add[label] = max(0, add_count)  # Ensure non-negative
-        print(f"Category {label}: Adding {samples_to_add[label]} synthetic samples to {genuine_count} genuine samples")
+        print(f"Category {label}: Adding {samples_to_add[label]} {dataset_type} samples to {genuine_count} genuine samples")
     
     # First, copy all genuine training files to the output directory
     print("Copying genuine training files...")
@@ -275,22 +352,22 @@ def balance_training_set(genuine_train_dict, genuine_train_ids, synthetic_path, 
         for feature_id in feature_ids:
             balanced_labels.append([label, feature_id])
     
-    # Add synthetic samples for each category
+    # Add synthetic/augmented samples for each category
     for label in [0, 1, 2]:
-        # Get available synthetic feature IDs for this category
-        available_features = synthetic_label_dict[label].copy()
+        # Get available synthetic/augmented feature IDs for this category
+        available_features = synthetic_label_dict.get(label, []).copy()
         
         # Randomly select the required number of samples
         num_to_add = samples_to_add[label]
-        if num_to_add > 0:
+        if num_to_add > 0 and available_features:
             selected_features = random.sample(available_features, num_to_add)
             
-            print(f"Adding {len(selected_features)} synthetic samples for category {label}")
+            print(f"Adding {len(selected_features)} {dataset_type} samples for category {label}")
             
-            # Copy selected synthetic features with new IDs
+            # Copy selected synthetic/augmented features with new IDs
             next_id = max_feature_id + 1
             for i, feature_id in enumerate(selected_features):
-                # Source synthetic file
+                # Source synthetic/augmented file
                 src_filename = f"feature_{feature_id:02d}.npy"
                 src_path = os.path.join(synthetic_path, "Feature", src_filename)
                 
@@ -300,10 +377,12 @@ def balance_training_set(genuine_train_dict, genuine_train_ids, synthetic_path, 
                 dst_path = os.path.join(output_feature_dir, dst_filename)
                 
                 # Copy file with new ID
-                shutil.copy2(src_path, dst_path)
-                
-                # Add to balanced labels
-                balanced_labels.append([label, new_id])
+                if os.path.exists(src_path):
+                    shutil.copy2(src_path, dst_path)
+                    # Add to balanced labels
+                    balanced_labels.append([label, new_id])
+                else:
+                    print(f"Warning: {dataset_type} file not found: {src_path}")
             
             # Update max_feature_id
             max_feature_id += len(selected_features)
@@ -315,7 +394,7 @@ def balance_training_set(genuine_train_dict, genuine_train_ids, synthetic_path, 
     # Print summary
     original_count = len(genuine_train_ids)
     added_count = len(balanced_labels) - original_count
-    print(f"Balanced training set: {original_count} genuine + {added_count} synthetic = {len(balanced_labels)} total samples")
+    print(f"Balanced training set: {original_count} genuine + {added_count} {dataset_type} = {len(balanced_labels)} total samples")
     
     # Print final class distribution
     final_dist = defaultdict(int)
@@ -330,6 +409,13 @@ def main():
     # Create base output directory
     os.makedirs(args.output_dir, exist_ok=True)
     
+    # Auto-detect dataset type if needed
+    if args.dataset_type == "auto":
+        dataset_type = detect_dataset_type(args.synthetic_dataset)
+    else:
+        dataset_type = args.dataset_type
+    
+    print(f"Using dataset type: {dataset_type}")
     print(f"Will create balanced training set using '{args.balance_to}' strategy")
     
     # First, create train/test split with only genuine data
@@ -349,6 +435,7 @@ def main():
         args.synthetic_dataset,
         output_path,
         args.balance_to,
+        dataset_type,
         args.seed
     )
     

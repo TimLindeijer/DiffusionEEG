@@ -7,7 +7,7 @@ train:
     drop_last: false
     base_path: 'data/sleep-edfx'
     output_dir: '/project/outputs'
-    run_dir: 'aekl_eeg_4channels'  # Changed to indicate stability modifications
+    run_dir: 'aekl_eeg_4channels_no_spec'  # Changed to indicate stability modifications
     experiment: 'AEKL'
 models:
   optimizer_g_lr: 0.0001  # Reduced from 0.005 (50x lower) - critical for stability

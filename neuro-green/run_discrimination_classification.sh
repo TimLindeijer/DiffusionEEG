@@ -5,19 +5,26 @@
 #SBATCH --job-name=discrim
 #SBATCH --output=outputs/discrimination_%j.out
 
+# Parse command line arguments
+DISCRIMINATION_TYPE=${1:-"all"}  # Default to "all" if no argument provided
+
+# Validate discrimination type
+if [[ ! "$DISCRIMINATION_TYPE" =~ ^(hc|mci|dementia|all)$ ]]; then
+    echo "Error: Invalid discrimination type '$DISCRIMINATION_TYPE'"
+    echo "Valid options: hc, mci, dementia, all"
+    exit 1
+fi
+
 # Activate environment (adjust based on your system)
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
 uenv miniconda3-py38
 conda activate green-env
 
-# Set paths - change these to your specific discrimination dataset paths
-DISCRIMINATION_TYPE="all"  # Options: hc, mci, dementia, all
-
 # Build paths based on discrimination type
-DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/discrimination_datasets/${DISCRIMINATION_TYPE}_train"
-TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/discrimination_datasets/${DISCRIMINATION_TYPE}_val"
-OUTPUT_DIR="results/discrimination_${DISCRIMINATION_TYPE}"
-RUN_NAME="Discrimination_${DISCRIMINATION_TYPE}_$(date +%Y%m%d_%H%M%S)"
+DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_discrimination/${DISCRIMINATION_TYPE}_train"
+TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_discrimination/${DISCRIMINATION_TYPE}_val"
+OUTPUT_DIR="results/ldm_norm_fix_discrimination_${DISCRIMINATION_TYPE}"
+RUN_NAME="LDM_Norm_FIX_Discrimination_${DISCRIMINATION_TYPE}_$(date +%Y%m%d_%H%M%S)"
 
 # W&B Authentication - using API key from file
 export WANDB_API_KEY=$(cat ~/.wandb_key)
@@ -29,6 +36,9 @@ echo "Train data directory: $DATA_DIR"
 echo "Test data directory: $TEST_DATA_DIR"
 echo "Output directory: $OUTPUT_DIR"
 echo "W&B enabled: Yes"
+
+# Create output directory if it doesn't exist
+mkdir -p "$OUTPUT_DIR"
 
 # Run the training script
 python neuro-green/train_green_model.py \
@@ -49,9 +59,9 @@ python neuro-green/train_green_model.py \
     --sfreq 200 \
     --seed 42 \
     --use_wandb \
-    --wandb_project "green-discrimination" \
+    --wandb_project "green-diff" \
     --wandb_name "$RUN_NAME" \
-    --wandb_tags "discrimination" "${DISCRIMINATION_TYPE}"
+    --wandb_tags "discrimination" "${DISCRIMINATION_TYPE}" 
 
 # Save information about the completed job
 echo "Job completed at $(date)"
@@ -59,3 +69,5 @@ echo "Results saved to $OUTPUT_DIR"
 
 # Compress results for easy downloading
 tar -czvf ${OUTPUT_DIR}_results.tar.gz $OUTPUT_DIR
+
+echo "Compressed results saved as ${OUTPUT_DIR}_results.tar.gz"

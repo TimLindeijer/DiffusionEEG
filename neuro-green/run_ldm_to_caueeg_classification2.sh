@@ -2,8 +2,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=24:00:00
-#SBATCH --job-name=mlr-balanced
-#SBATCH --output=outputs/mlr_balanced_%j.out
+#SBATCH --job-name=nospecGREEN-LDM-CAUEEG2-Transfer
+#SBATCH --output=outputs/nospecGREEN_LDM_CAUEEG2_Transfer_%j.out
 
 # Activate environment (adjust based on your system)
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
@@ -14,16 +14,16 @@ conda activate green-env
 # pip install lightning
 
 # Set paths
-DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_balanced_datasets/train_balanced"
-TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_balanced_datasets/test_genuine"
-OUTPUT_DIR="results/ldm_norm_fix_balanced_classification"
-RUN_NAME="LDM_BALANCED_NORMALIZE_FIX_$(date +%Y%m%d_%H%M%S)"
+DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized_FIX_NO_SPEC"
+TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_ready_datasets/test_genuine"
+OUTPUT_DIR="results/LDM_PSD_Norm_fixed_no_spec_classification"
+RUN_NAME="LDM_Norm_FIX_to_CAUEEG_$(date +%Y%m%d_%H%M%S)"
 
 # W&B Authentication - using API key from file
 export WANDB_API_KEY=$(cat ~/.wandb_key)
 
 # Print information about the run
-echo "Starting GREEN training on LDM balanced dataset with fixed subject-level evaluation"
+echo "Starting GREEN training on LDM dataset with fixed subject-level evaluation"
 echo "Run name: $RUN_NAME"
 echo "Data directory: $DATA_DIR"
 echo "Output directory: $OUTPUT_DIR"
@@ -50,7 +50,7 @@ python neuro-green/train_green_model.py \
     --use_wandb \
     --wandb_project "green-diff" \
     --wandb_name "$RUN_NAME" \
-    --wandb_tags "caueeg2" "balanced" "synthetic"
+    --wandb_tags "synthetic" "caueeg2" "transfer_learning" "reverse_transfer" "ldm" "no_spec"
 
 # Save information about the completed job
 echo "Job completed at $(date)"

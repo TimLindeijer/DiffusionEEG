@@ -14,10 +14,10 @@ conda activate green-env
 # pip install lightning
 
 # Set paths
-DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_ready_datasets/train_augmented_40pct"
-TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ml_ready_datasets/test_genuine"
-OUTPUT_DIR="results/ldm_mixed_classification"
-RUN_NAME="LDM_40_NORMALIZE_$(date +%Y%m%d_%H%M%S)"
+DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_ready_datasets/train_augmented_40pct"
+TEST_DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/ldm_norm_fix_ready_datasets/test_genuine"
+OUTPUT_DIR="results/ldm_mixed_classification_40"
+RUN_NAME="LDM_40_NORMALIZE_FIX_$(date +%Y%m%d_%H%M%S)"
 
 # W&B Authentication - using API key from file
 export WANDB_API_KEY=$(cat ~/.wandb_key)
@@ -50,7 +50,7 @@ python neuro-green/train_green_model.py \
     --use_wandb \
     --wandb_project "green-diff" \
     --wandb_name "$RUN_NAME" \
-    --wandb_tags "caueeg2" "genuine"
+    --wandb_tags "caueeg2" "genuine" "mixed" "classification" "ldm" "40pct"	
 
 # Save information about the completed job
 echo "Job completed at $(date)"

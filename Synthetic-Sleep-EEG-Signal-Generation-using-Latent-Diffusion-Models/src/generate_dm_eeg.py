@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """
 Optimized script to generate synthetic EEG data with the same structure as the original dataset.
-This version includes significant performance optimizations, proper PSD scaling, and clear progress tracking.
-Fix for reference data with varying epochs per subject.
+This version is adapted for PURE diffusion models (no autoencoder) and includes significant 
+performance optimizations, proper PSD scaling, and clear progress tracking.
 Modified to only generate synthetic data for existing feature files.
 """
 
@@ -23,8 +23,8 @@ import matplotlib.pyplot as plt
 
 # Import necessary model components
 print("START OF SCRIPT: Importing required modules...")
-from generative.networks.nets import AutoencoderKL
 from generative.networks.schedulers import DDPMScheduler
+from generative.inferers import DiffusionInferer
 from models.ldm import UNetModel
 from omegaconf import OmegaConf
 print("All modules imported successfully")
@@ -45,7 +45,7 @@ def parse_args():
     print("Parsing command line arguments...")
     parser = argparse.ArgumentParser(description="Generate synthetic EEG data matching original dataset structure")
     
-    # Model paths for each category
+    # Model paths for each category (pure diffusion models)
     parser.add_argument("--hc_model_path", type=str, required=True, 
                       help="Path to the healthy controls diffusion model weights")
     parser.add_argument("--mci_model_path", type=str, required=True,
@@ -53,16 +53,7 @@ def parse_args():
     parser.add_argument("--dementia_model_path", type=str, required=True, 
                       help="Path to the dementia diffusion model weights")
     
-    parser.add_argument("--hc_autoencoder_path", type=str, required=True,
-                      help="Path to the healthy controls autoencoder weights")
-    parser.add_argument("--mci_autoencoder_path", type=str, required=True,
-                      help="Path to the MCI autoencoder weights")
-    parser.add_argument("--dementia_autoencoder_path", type=str, required=True,
-                      help="Path to the dementia autoencoder weights")
-    
     # Config files
-    parser.add_argument("--autoencoder_config", type=str, required=True,
-                      help="Path to the autoencoder config file")
     parser.add_argument("--diffusion_config", type=str, required=True,
                       help="Path to the diffusion model config file")
     
@@ -79,7 +70,7 @@ def parse_args():
     # Performance optimization parameters
     parser.add_argument("--diffusion_steps", type=int, default=100,
                       help="Number of diffusion steps (fewer = faster)")
-    parser.add_argument("--batch_epochs", type=int, default=64,
+    parser.add_argument("--batch_epochs", type=int, default=16,
                       help="Number of epochs to generate in a single batch")
     parser.add_argument("--category", type=str, choices=["hc", "mci", "dementia", "all"], default="all",
                       help="Which category to generate (for parallel jobs)")
@@ -90,15 +81,15 @@ def parse_args():
     parser.add_argument("--use_gpu", action="store_true", default=True,
                       help="Use GPU for generation if available")
     
-    # Fixed dimensions
+    # Fixed dimensions (adjust based on your training data)
     parser.add_argument("--num_epochs", type=int, default=71,
                       help="Number of epochs per sample")
     parser.add_argument("--num_channels", type=int, default=19,
                       help="Number of EEG channels")
-    parser.add_argument("--num_timepoints", type=int, default=928,
+    parser.add_argument("--num_timepoints", type=int, default=6000,
                       help="Number of timepoints per epoch")
     
-    # New PSD scaling parameters
+    # PSD scaling parameters
     parser.add_argument("--normalize_psd", action="store_true", default=True,
                       help="Apply PSD normalization to match real data statistics")
     parser.add_argument("--per_channel", action="store_true", default=True,
@@ -114,18 +105,10 @@ def parse_args():
     print(f"Arguments parsed successfully: Category={args.category}, Diffusion steps={args.diffusion_steps}, Batch epochs={args.batch_epochs}")
     return args
 
-def ensure_correct_data_format(data, expected_channels=19, expected_timepoints=1000):
+def ensure_correct_data_format(data, expected_channels=19, expected_timepoints=6000):
     """
     Ensure data is in the expected format (epochs, channels, timepoints).
     Will automatically detect and transpose if needed.
-    
-    Args:
-        data: EEG data array
-        expected_channels: Number of EEG channels (should be smaller than timepoints)
-        expected_timepoints: Number of timepoints (should be larger than channels)
-        
-    Returns:
-        Data in correct format (epochs, channels, timepoints)
     """
     # First check if dimensions are already as expected
     if data.ndim == 3:
@@ -151,13 +134,6 @@ def read_original_labels(label_path, data_path):
     """
     Read the original label.npy file to extract feature numbering and labels.
     Only include feature IDs that have corresponding feature files.
-    
-    Args:
-        label_path: Path to the label.npy file
-        data_path: Path to the feature directory
-    
-    Returns:
-        Dictionary mapping label (0, 1, 2) to list of feature file numbers that exist
     """
     print(f"Reading original labels from: {label_path}")
     print(f"Checking for existing feature files in: {data_path}")
@@ -206,15 +182,6 @@ def read_original_labels(label_path, data_path):
 def load_reference_data(data_path, label_to_features, label, num_samples=5):
     """
     Load reference data samples with handling for varying epoch counts.
-    
-    Args:
-        data_path: Path to the feature directory of the original dataset
-        label_to_features: Dictionary mapping labels to feature IDs
-        label: The label value (0=HC, 1=MCI, 2=Dementia)
-        num_samples: Number of reference samples to load
-        
-    Returns:
-        Numpy array of reference data with shape [total_epochs, channels, timepoints]
     """
     print(f"Loading {num_samples} reference samples for label {label}...")
     
@@ -234,17 +201,8 @@ def load_reference_data(data_path, label_to_features, label, num_samples=5):
             # Load the feature data
             feature_data = np.load(feature_path)
             
-            # Check feature shape
-            if feature_data.shape[1] == 1000 and feature_data.shape[2] == 19:
-                # Shape is (epochs, 1000, 19) - correct format but need to transpose
-                # Transpose to (epochs, 19, 1000) to match generation output format
-                feature_data = np.transpose(feature_data, (0, 2, 1))
-            elif feature_data.shape[1] == 19 and feature_data.shape[2] == 1000:
-                # Shape is already (epochs, 19, 1000) - correct format
-                pass
-            else:
-                print(f"Warning: Unexpected shape {feature_data.shape} for feature {feature_id}, skipping")
-                continue
+            # Check feature shape and ensure correct format
+            feature_data = ensure_correct_data_format(feature_data)
             
             print(f"Loaded reference feature_{feature_id:02d}.npy with shape {feature_data.shape}")
             
@@ -264,18 +222,9 @@ def load_reference_data(data_path, label_to_features, label, num_samples=5):
     print(f"Combined reference data shape: {reference_data.shape} (total epochs from all samples)")
     return reference_data
 
-def calculate_psd(data, fs=250, nperseg=512):
+def calculate_psd(data, fs=200, nperseg=512):
     """
     Calculate Power Spectral Density (PSD) of EEG data in dB.
-    
-    Args:
-        data: Numpy array of shape [..., channels, timepoints]
-        fs: Sampling frequency in Hz
-        nperseg: Length of each segment for welch method
-        
-    Returns:
-        Tuple of (frequencies, PSD values) where PSD is averaged across all 
-        non-frequency dimensions
     """
     # Make sure data is numpy array
     if isinstance(data, torch.Tensor):
@@ -303,13 +252,6 @@ def calculate_psd(data, fs=250, nperseg=512):
 def plot_psd_comparison(real_f, real_psd, syn_f, syn_psd, norm_f, norm_psd, category, output_dir):
     """
     Plot and save a comparison of PSDs between real, synthetic and normalized data.
-    
-    Args:
-        real_f, real_psd: Frequencies and PSD values for real data
-        syn_f, syn_psd: Frequencies and PSD values for raw synthetic data
-        norm_f, norm_psd: Frequencies and PSD values for normalized synthetic data
-        category: Category name (hc, mci, dementia)
-        output_dir: Directory to save the plot
     """
     plt.figure(figsize=(12, 8))
     plt.plot(real_f, real_psd, 'b-', linewidth=2, label='Real Data')
@@ -344,14 +286,6 @@ def plot_psd_comparison(real_f, real_psd, syn_f, syn_psd, norm_f, norm_psd, cate
 def normalize_to_reference(synthetic_data, reference_data, per_channel=True):
     """
     Normalize synthetic data to match the statistical properties of reference data.
-    
-    Args:
-        synthetic_data: Numpy array of synthetic data of shape [epochs, channels, timepoints]
-        reference_data: Numpy array of reference data of shape [samples, epochs, channels, timepoints]
-        per_channel: Whether to normalize each channel separately
-    
-    Returns:
-        Normalized synthetic data with same statistical properties as reference
     """
     print(f"Synthetic data shape: {synthetic_data.shape}, Reference data shape: {reference_data.shape}")
     print("Applying statistical normalization to match real data properties...")
@@ -432,56 +366,8 @@ def save_checkpoint(output_dir, category, completed_ids):
     with open(checkpoint_path, 'w') as f:
         json.dump(checkpoint_data, f)
 
-def load_autoencoder(config_path, autoencoder_path, device):
-    """Load the autoencoder model and compute latent dimensions."""
-    print(f"Loading autoencoder config from: {config_path}")
-    
-    try:
-        # Load config
-        config = OmegaConf.load(config_path)
-        autoencoder_args = config.autoencoderkl.params
-        print(f"Autoencoder configuration loaded successfully")
-        
-        # Create model
-        print(f"Creating autoencoder model instance...")
-        autoencoder = AutoencoderKL(**autoencoder_args)
-        print(f"Autoencoder created successfully, loading weights from: {autoencoder_path}")
-        
-        # Load weights
-        state_dict = torch.load(autoencoder_path, map_location=device)
-        print(f"Weights loaded successfully, applying to model...")
-        autoencoder.load_state_dict(state_dict)
-        print(f"Moving model to device: {device}")
-        autoencoder = autoencoder.to(device)
-        autoencoder.eval()
-        print(f"Autoencoder ready on device: {device}")
-        
-        # Calculate scale factor 
-        print("Calculating latent dimensions and scale factor...")
-        latent_channels = autoencoder_args['latent_channels']
-        with torch.no_grad():
-            # Create a random input tensor
-            print(f"Creating test input tensor with shape: [1, {autoencoder_args['in_channels']}, 928]")
-            random_input = torch.randn(1, autoencoder_args['in_channels'], 928).to(device)
-            print("Encoding test tensor to determine latent shape...")
-            z = autoencoder.encode_stage_2_inputs(random_input)
-            print(f"Latent tensor shape: {z.shape}")
-            scale_factor = 1.0 / torch.std(z)
-            latent_shape = z.shape[2]  # Get actual latent dimension
-            
-        print(f"Autoencoder loaded successfully. Latent channels: {latent_channels}, Latent shape: {latent_shape}")
-        print(f"Scale factor: {scale_factor}")
-        print(f"Current GPU memory: {get_gpu_memory()}")
-            
-        return autoencoder, scale_factor, latent_channels, latent_shape
-    except Exception as e:
-        print(f"ERROR loading autoencoder: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise
-
-def load_diffusion_model(config_path, model_path, latent_channels, latent_shape, device):
-    """Load the diffusion model with correct parameter handling."""
+def load_diffusion_model(config_path, model_path, device):
+    """Load the pure diffusion model."""
     print(f"Loading diffusion model config from: {config_path}")
     
     try:
@@ -509,10 +395,9 @@ def load_diffusion_model(config_path, model_path, latent_channels, latent_shape,
                 'dropout': 0.0
             }
         
-        # Override latent space parameters
-        parameters['in_channels'] = latent_channels
-        parameters['out_channels'] = latent_channels
-        parameters['image_size'] = latent_shape
+        # Set channels for direct EEG generation (no latent space)
+        parameters['in_channels'] = 19
+        parameters['out_channels'] = 19
         
         print(f"Diffusion model configuration: {parameters}")
         
@@ -523,9 +408,23 @@ def load_diffusion_model(config_path, model_path, latent_channels, latent_shape,
         
         # Load weights
         print(f"Loading diffusion model weights from: {model_path}")
-        state_dict = torch.load(model_path, map_location=device)
-        print("Weights loaded successfully, applying to model...")
+        checkpoint = torch.load(model_path, map_location=device)
+        
+        # Handle different checkpoint formats
+        if 'model_state_dict' in checkpoint:
+            state_dict = checkpoint['model_state_dict']
+        elif 'state_dict' in checkpoint:
+            state_dict = checkpoint['state_dict']
+        else:
+            state_dict = checkpoint
+        
+        # Handle DataParallel wrapper
+        if any(key.startswith('module.') for key in state_dict.keys()):
+            # Remove 'module.' prefix
+            state_dict = {key.replace('module.', ''): value for key, value in state_dict.items()}
+        
         diffusion.load_state_dict(state_dict)
+        print("Weights loaded successfully, applying to model...")
         print(f"Moving diffusion model to device: {device}")
         diffusion = diffusion.to(device)
         diffusion.eval()
@@ -541,43 +440,24 @@ def load_diffusion_model(config_path, model_path, latent_channels, latent_shape,
         )
         scheduler = scheduler.to(device)
         print("Scheduler created and moved to device")
+        
+        # Create inferer
+        inferer = DiffusionInferer(scheduler)
+        
         print(f"Current GPU memory: {get_gpu_memory()}")
         
-        return diffusion, scheduler
+        return diffusion, scheduler, inferer
     except Exception as e:
         print(f"ERROR loading diffusion model: {str(e)}")
         import traceback
         traceback.print_exc()
         raise
 
-def generate_sample_batch(diffusion_model, autoencoder, scheduler, scale_factor, latent_shape, 
-                       num_epochs, channels, timepoints, batch_size, diffusion_steps,
-                       reference_data=None, normalize=True, per_channel=True, 
-                       plot_psd=False, category=None, output_dir=None, fs=250):
+def generate_sample_batch(diffusion_model, scheduler, inferer, num_epochs, channels, timepoints, 
+                       batch_size, diffusion_steps, reference_data=None, normalize=True, 
+                       per_channel=True, plot_psd=False, category=None, output_dir=None, fs=200):
     """
-    Generate a batch of epochs all at once with optimized settings and proper normalization.
-    
-    Args:
-        diffusion_model: Diffusion model for generating latent samples
-        autoencoder: Autoencoder model for decoding latent samples
-        scheduler: Diffusion scheduler
-        scale_factor: Scale factor for latent space normalization
-        latent_shape: Shape of latent space (channels, dimensions)
-        num_epochs: Number of epochs to generate
-        channels: Number of EEG channels
-        timepoints: Number of timepoints per epoch
-        batch_size: Batch size for generation
-        diffusion_steps: Number of diffusion steps (fewer = faster)
-        reference_data: Reference data for PSD normalization
-        normalize: Whether to apply normalization
-        per_channel: Whether to normalize per channel
-        plot_psd: Whether to plot PSD comparison
-        category: Category name for plotting
-        output_dir: Output directory for plots
-        fs: Sampling frequency in Hz
-        
-    Returns:
-        Normalized synthetic sample
+    Generate a batch of epochs using pure diffusion model.
     """
     device = next(diffusion_model.parameters()).device
     use_autocast = torch.cuda.is_available()
@@ -591,64 +471,41 @@ def generate_sample_batch(diffusion_model, autoencoder, scheduler, scale_factor,
         
         try:
             with torch.no_grad():
-                # Generate all latents
-                latents = torch.randn((batch_size_current, latent_shape[0], latent_shape[1]), device=device)
+                # Generate random noise for this batch
+                noise_shape = (batch_size_current, channels, timepoints)
+                noise = torch.randn(noise_shape, device=device)
                 
-                # Optimized diffusion process with fewer steps
-                scheduler.set_timesteps(num_inference_steps=diffusion_steps)
-                timesteps = scheduler.timesteps
+                print(f"  Generating batch {i//batch_size + 1}, epochs {i+1}-{i+batch_size_current}")
                 
-                # Diffusion denoising process
-                for step_idx, t in enumerate(timesteps):
-                    if step_idx % 20 == 0:  # Print progress every 20 steps
-                        print(f"  Diffusion progress: step {step_idx+1}/{len(timesteps)}")
-                    
-                    t_batch = torch.ones(batch_size_current, dtype=torch.long, device=device) * t
-                    
-                    if use_autocast:
-                        with amp.autocast():
-                            model_output = diffusion_model(latents, timesteps=t_batch)
-                            step_output = scheduler.step(model_output, t, latents)
-                            latents = step_output[0] if isinstance(step_output, tuple) else step_output.prev_sample
-                    else:
-                        model_output = diffusion_model(latents, timesteps=t_batch)
-                        step_output = scheduler.step(model_output, t, latents)
-                        latents = step_output[0] if isinstance(step_output, tuple) else step_output.prev_sample
-                
-                print("Diffusion complete. Applying inverse scale factor...")
-                # Apply proper inverse scaling to latents
-                latents = latents / scale_factor
-                
-                print("Decoding latent samples...")
+                # Use the inferer to generate samples
                 if use_autocast:
                     with amp.autocast():
-                        epochs_batch = autoencoder.decode_stage_2_outputs(latents)
+                        generated = inferer.sample(
+                            input_noise=noise,
+                            diffusion_model=diffusion_model,
+                            scheduler=scheduler,
+                            save_intermediates=False,
+                            intermediate_steps=diffusion_steps
+                        )
                 else:
-                    epochs_batch = autoencoder.decode_stage_2_outputs(latents)
+                    generated = inferer.sample(
+                        input_noise=noise,
+                        diffusion_model=diffusion_model,
+                        scheduler=scheduler,
+                        save_intermediates=False,
+                        intermediate_steps=diffusion_steps
+                    )
                 
-                # Move to CPU and convert to float
-                epochs_batch = epochs_batch.cpu().float().numpy()
-                
-                # Handle dimension mismatch
-                if epochs_batch.shape[2] != timepoints:
-                    print(f"Warning: Generated data has {epochs_batch.shape[2]} timepoints instead of {timepoints}, resizing...")
-                    resized_batch = np.zeros((epochs_batch.shape[0], epochs_batch.shape[1], timepoints))
-                    for b in range(epochs_batch.shape[0]):
-                        for c in range(epochs_batch.shape[1]):
-                            resized_batch[b, c] = np.interp(
-                                np.linspace(0, epochs_batch.shape[2] - 1, timepoints),
-                                np.arange(epochs_batch.shape[2]),
-                                epochs_batch[b, c]
-                            )
-                    epochs_batch = resized_batch
+                # Move to CPU and convert to numpy
+                generated_np = generated.cpu().float().numpy()
                 
                 # Add to sample
                 for j in range(batch_size_current):
                     if i + j < num_epochs:
-                        sample[i + j] = epochs_batch[j]
+                        sample[i + j] = generated_np[j]
                 
                 # Cleanup to free memory
-                del latents, model_output, step_output
+                del noise, generated
                 torch.cuda.empty_cache()
                 
         except Exception as e:
@@ -734,7 +591,7 @@ def save_labels(label_to_features, output_dir):
         print(f"ERROR saving labels: {str(e)}")
         raise
 
-def generate_category(category_name, label, feature_ids, diffusion, autoencoder, scheduler, scale_factor, latent_shape, 
+def generate_category(category_name, label, feature_ids, diffusion, scheduler, inferer, 
                      output_dir, args, reference_data=None, completed_ids=None):
     """Generate all samples for a specific category."""
     print(f"\n===== STARTING GENERATION FOR CATEGORY: {category_name} =====")
@@ -757,7 +614,7 @@ def generate_category(category_name, label, feature_ids, diffusion, autoencoder,
             sample_start_time = time.time()
             
             sample = generate_sample_batch(
-                diffusion, autoencoder, scheduler, scale_factor, latent_shape,
+                diffusion, scheduler, inferer,
                 args.num_epochs, args.num_channels, args.num_timepoints,
                 args.batch_epochs, args.diffusion_steps,
                 reference_data=reference_data,
@@ -811,7 +668,7 @@ def generate_category(category_name, label, feature_ids, diffusion, autoencoder,
     return completed_ids + completed_this_run
 
 def main():
-    print("========== SCRIPT STARTING ==========")
+    print("========== PURE LDM GENERATION SCRIPT STARTING ==========")
     print(f"Python version: {sys.version}")
     print(f"PyTorch version: {torch.__version__}")
     print(f"CUDA available: {torch.cuda.is_available()}")
@@ -883,57 +740,24 @@ def main():
         # Load models for this category
         print(f"\nLoading {category_name} models...")
         if category_name == "hc":
-            print("Starting to load HC models")
-            # Load autoencoder
-            print("Loading HC autoencoder...")
-            autoencoder, scale_factor, latent_channels, latent_shape = load_autoencoder(
-                args.autoencoder_config, 
-                args.hc_autoencoder_path,
-                device
-            )
-            # Load diffusion model
-            print("Loading HC diffusion model...")
-            diffusion, scheduler = load_diffusion_model(
+            print("Starting to load HC diffusion model")
+            diffusion, scheduler, inferer = load_diffusion_model(
                 args.diffusion_config,
                 args.hc_model_path,
-                latent_channels,
-                (latent_channels, latent_shape),
                 device
             )
         elif category_name == "mci":
-            print("Starting to load MCI models")
-            # Load autoencoder
-            print("Loading MCI autoencoder...")
-            autoencoder, scale_factor, latent_channels, latent_shape = load_autoencoder(
-                args.autoencoder_config, 
-                args.mci_autoencoder_path,
-                device
-            )
-            # Load diffusion model
-            print("Loading MCI diffusion model...")
-            diffusion, scheduler = load_diffusion_model(
+            print("Starting to load MCI diffusion model")
+            diffusion, scheduler, inferer = load_diffusion_model(
                 args.diffusion_config,
                 args.mci_model_path,
-                latent_channels,
-                (latent_channels, latent_shape),
                 device
             )
         elif category_name == "dementia":
-            print("Starting to load Dementia models")
-            # Load autoencoder
-            print("Loading Dementia autoencoder...")
-            autoencoder, scale_factor, latent_channels, latent_shape = load_autoencoder(
-                args.autoencoder_config, 
-                args.dementia_autoencoder_path,
-                device
-            )
-            # Load diffusion model
-            print("Loading Dementia diffusion model...")
-            diffusion, scheduler = load_diffusion_model(
+            print("Starting to load Dementia diffusion model")
+            diffusion, scheduler, inferer = load_diffusion_model(
                 args.diffusion_config,
                 args.dementia_model_path,
-                latent_channels,
-                (latent_channels, latent_shape),
                 device
             )
         
@@ -946,14 +770,13 @@ def main():
         # Generate samples for this category
         print(f"Starting generation for {category_name}...")
         generate_category(
-            category_name, label, feature_ids, diffusion, autoencoder, scheduler, 
-            scale_factor, (latent_channels, latent_shape), args.output_dir, args,
-            category_reference_data, completed_ids
+            category_name, label, feature_ids, diffusion, scheduler, inferer, 
+            args.output_dir, args, category_reference_data, completed_ids
         )
         
         # Clear GPU memory
         print(f"Clearing GPU memory after {category_name} generation")
-        del diffusion, autoencoder, scheduler
+        del diffusion, scheduler, inferer
         gc.collect()
         torch.cuda.empty_cache()
     
