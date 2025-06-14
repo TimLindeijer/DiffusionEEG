@@ -2,43 +2,66 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=24:00:00
-#SBATCH --job-name=green_lead
-#SBATCH --output=outputs/GREEN_EEG_Classification_SYNTH_LEAD_CAUEEG2_300_EPOCHS%j.out
+#SBATCH --job-name=main_test
+#SBATCH --output=outputs/main_test_%j.out
 
-# Create output directories
-mkdir -p outputs
-mkdir -p results/synth_lead_caueeg2_classification_300_epochs
+# =====================================
+# CONFIGURATION - CHANGE THESE VALUES
+# =====================================
+# Set the combination you want to run (True/False)
+SHUFFLE=true
+SHUFFLE_FIRST_EPOCH=false
+RANDOMIZE_EPOCHS=false
+
+# =====================================
+# AUTOMATIC CONFIGURATION
+# =====================================
+# Convert boolean values to T/F for naming
+SHUFFLE_STR=$([ "$SHUFFLE" = true ] && echo "T" || echo "F")
+SHUFFLE_FIRST_STR=$([ "$SHUFFLE_FIRST_EPOCH" = true ] && echo "T" || echo "F")
+RANDOMIZE_STR=$([ "$RANDOMIZE_EPOCHS" = true ] && echo "T" || echo "F")
+
+# Create combination string (e.g., "TFT")
+COMBINATION="${SHUFFLE_STR}${SHUFFLE_FIRST_STR}${RANDOMIZE_STR}"
+
+# Update job name to include combination
+
+# Set paths
+DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/SYNTH-CAUEEG2-NORMALIZED"
+
+# Create output directory name with combination
+OUTPUT_DIR="results/NO_TEST_SYNTH-CAUEEG2-NORMALIZED_${COMBINATION}"
+mkdir -p $OUTPUT_DIR
+
+# Create run name with combination and timestamp
+RUN_NAME="NO_TEST_SYNTH-CAUEEG2-NORMALIZED_${COMBINATION}_$(date +%Y%m%d_%H%M%S)"
 
 # Activate environment (adjust based on your system)
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
 uenv miniconda3-py38
 conda activate green-env
-# pip install wandb
-# pip install geotorch
-# pip install lightning
-# Set paths
-# DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2"
-DATA_DIR="/home/stud/timlin/bhome/DiffusionEEG/dataset/SYNTH-CAUEEG2"
-OUTPUT_DIR="results/synth_lead_caueeg2_classification_300_epochs"
-RUN_NAME="SYNTH_LEAD_CAUEEG2_300_EPOCHS_$(date +%Y%m%d_%H%M%S)"
 
-# W&B Authentication - using API key
-# IMPORTANT: Replace YOUR_API_KEY_HERE with your actual W&B API key
+# W&B Authentication - using API key from file
 export WANDB_API_KEY=$(cat ~/.wandb_key)
 
-
 # Print information about the run
-echo "Starting GREEN training on SYNTHETIC CAUEEG2 dataset"
+echo "========================================"
+echo "Starting GREEN training"
+echo "========================================"
+echo "Combination: $COMBINATION"
+echo "  shuffle: $SHUFFLE"
+echo "  shuffle_first_epoch: $SHUFFLE_FIRST_EPOCH"
+echo "  randomize_epochs: $RANDOMIZE_EPOCHS"
 echo "Run name: $RUN_NAME"
 echo "Data directory: $DATA_DIR"
 echo "Output directory: $OUTPUT_DIR"
 echo "W&B enabled: Yes"
+echo "========================================"
 
-# Run the training script
-python neuro-green/train_green_model.py \
-    --data_dir $DATA_DIR \
+# Build the command with conditional flags
+CMD_ARGS="--data_dir $DATA_DIR \
     --output_dir $OUTPUT_DIR \
-    --batch_size 32 \
+    --batch_size 16 \
     --learning_rate 0.0003 \
     --weight_decay 1e-5 \
     --max_epochs 300 \
@@ -51,13 +74,32 @@ python neuro-green/train_green_model.py \
     --sfreq 200 \
     --seed 42 \
     --use_wandb \
-    --wandb_project "green-diff" \
-    --wandb_name "$RUN_NAME" \
-    --wandb_tags "synthetic_lead_caueeg2" "production" "300_epochs" 
+    --wandb_project green-diff-shuffle2 \
+    --wandb_name $RUN_NAME \
+    --wandb_tags caueeg2 genuine shuffle_${SHUFFLE_STR} first_epoch_${SHUFFLE_FIRST_STR} randomize_${RANDOMIZE_STR}"
+
+# Add shuffle flags conditionally
+if [ "$SHUFFLE" = true ]; then
+    CMD_ARGS="$CMD_ARGS --shuffle"
+fi
+
+if [ "$SHUFFLE_FIRST_EPOCH" = true ]; then
+    CMD_ARGS="$CMD_ARGS --shuffle_first_epoch"
+fi
+
+if [ "$RANDOMIZE_EPOCHS" = true ]; then
+    CMD_ARGS="$CMD_ARGS --randomize_epochs"
+fi
+
+# Run the training script
+python neuro-green/train_green_model.py $CMD_ARGS
 
 # Save information about the completed job
+echo "========================================"
 echo "Job completed at $(date)"
+echo "Combination: $COMBINATION"
 echo "Results saved to $OUTPUT_DIR"
+echo "========================================"
 
 # Compress results for easy downloading
 tar -czvf ${OUTPUT_DIR}_results.tar.gz $OUTPUT_DIR
