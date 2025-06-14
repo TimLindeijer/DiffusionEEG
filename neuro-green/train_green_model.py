@@ -2,6 +2,7 @@
 """
 Training script for GREEN model on CAUEEG2 dataset.
 Supports using separate datasets for training and testing.
+Modified to accept boolean parameters for shuffle configurations.
 """
 
 import os
@@ -147,6 +148,14 @@ def parse_args():
                         help='Dropout rate')
     parser.add_argument('--sfreq', type=float, default=200.0,
                         help='Sampling frequency of the data')
+    
+    # NEW: Shuffle configuration parameters
+    parser.add_argument('--shuffle', action='store_true',
+                        help='Enable shuffling in EpochsDataset')
+    parser.add_argument('--shuffle_first_epoch', action='store_true',
+                        help='Enable shuffle_first_epoch in EpochsDataset')
+    parser.add_argument('--randomize_epochs', action='store_true',
+                        help='Enable randomize_epochs in EpochsDataset')
     
     # Other parameters
     parser.add_argument('--num_workers', type=int, default=4,
@@ -501,22 +510,36 @@ def main():
     with open(os.path.join(args.output_dir, 'args.json'), 'w') as f:
         json.dump(vars(args), f, indent=4)
     
+    # Print shuffle configuration
+    print(f"Shuffle configuration:")
+    print(f"  shuffle: {args.shuffle}")
+    print(f"  shuffle_first_epoch: {args.shuffle_first_epoch}")
+    print(f"  randomize_epochs: {args.randomize_epochs}")
+    
     # Initialize wandb if enabled
     if args.use_wandb:
         # Create a run name if not specified
         if args.wandb_name is None:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            shuffle_config = f"{'T' if args.shuffle else 'F'}{'T' if args.shuffle_first_epoch else 'F'}{'T' if args.randomize_epochs else 'F'}"
             if args.use_separate_test:
-                args.wandb_name = f"GREEN_TRANSFER_{timestamp}"
+                args.wandb_name = f"GREEN_TRANSFER_{shuffle_config}_{timestamp}"
             else:
-                args.wandb_name = f"GREEN_CAUEEG_{timestamp}"
+                args.wandb_name = f"GREEN_CAUEEG_{shuffle_config}_{timestamp}"
+        
+        # Add shuffle configuration to tags
+        shuffle_tags = [
+            f"shuffle_{args.shuffle}",
+            f"shuffle_first_{args.shuffle_first_epoch}",
+            f"randomize_{args.randomize_epochs}"
+        ]
         
         # Initialize wandb
         wandb.init(
             project=args.wandb_project,
             entity=args.wandb_entity,
             name=args.wandb_name,
-            tags=args.wandb_tags + (["transfer_learning"] if args.use_separate_test else []),
+            tags=args.wandb_tags + shuffle_tags + (["transfer_learning"] if args.use_separate_test else []),
             config=vars(args)
         )
         
@@ -596,14 +619,17 @@ def main():
     targets = [torch.tensor([1 if i == label else 0 for i in range(3)], dtype=torch.float32) 
               for label in all_labels_list]
     
-    # Create dataset
+    # Create dataset with specified shuffle configuration
     dataset = EpochsDataset(
         epochs=all_epochs_list,
         targets=targets,
         subjects=all_subjects_list,
         n_epochs=10,  # Use 10 epochs per subject
-        padding='repeat'
-    )
+        padding='repeat',
+        shuffle=args.shuffle,
+        shuffle_first_epoch=args.shuffle_first_epoch,
+        randomize_epochs=args.randomize_epochs
+        )
     
     # Log dataset information to wandb
     if args.use_wandb:
@@ -621,7 +647,12 @@ def main():
             "test_size": len(test_indices[0]),
             "train_distribution": train_distribution,
             "test_distribution": test_distribution,
-            "using_separate_test": args.use_separate_test
+            "using_separate_test": args.use_separate_test,
+            "shuffle_config": {
+                "shuffle": args.shuffle,
+                "shuffle_first_epoch": args.shuffle_first_epoch,
+                "randomize_epochs": args.randomize_epochs
+            }
         })
     
     # Print label distribution in train/test sets with class names

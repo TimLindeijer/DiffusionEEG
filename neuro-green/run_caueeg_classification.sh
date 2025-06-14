@@ -2,12 +2,11 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=24:00:00
-#SBATCH --job-name=green_caueeg2
-#SBATCH --output=outputs/GREEN_EEG_Classification_CAUEEG2_300_epochs_%j.out
+#SBATCH --job-name=green_shuffle_caueeg2
+#SBATCH --output=outputs/green_shuffle_%j.out
 
 # Create output directories
 mkdir -p outputs
-mkdir -p results/caueeg2_classification
 
 # Activate environment (adjust based on your system)
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
