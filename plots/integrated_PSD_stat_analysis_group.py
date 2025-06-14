@@ -281,9 +281,25 @@ def create_supervisor_requested_figure(all_results, freqs, channels, output_dir)
     Create the 3x2 grid figure as requested by supervisor:
     - Top row: PSD comparisons for each condition
     - Bottom row: Effect size heatmaps with significance contours
+    
+    FIXED: Ensures conditions are always in HC, MCI, Dementia order
     """
     
-    conditions = list(all_results.keys())
+    # FIXED ORDER: Always HC, MCI, Dementia
+    desired_order = ['HC', 'MCI', 'Dementia']
+    available_conditions = list(all_results.keys())
+    
+    # Get conditions in the desired order
+    conditions = [cond for cond in desired_order if cond in available_conditions]
+    
+    # Add any other conditions that might exist but aren't in the standard list
+    for cond in available_conditions:
+        if cond not in conditions:
+            conditions.append(cond)
+    
+    print(f"Available conditions: {available_conditions}")
+    print(f"Plotting conditions in fixed order: {conditions}")
+    
     fig, axes = plt.subplots(2, 3, figsize=(18, 12))
     
     # Define frequency ticks
@@ -332,11 +348,11 @@ def create_supervisor_requested_figure(all_results, freqs, channels, output_dir)
         im = ax.imshow(effect_sizes, aspect='auto', cmap='RdBu_r', 
                       interpolation='nearest', vmin=vmin, vmax=vmax)
         
-        # Add significance contours
+        # Add significance contours with more opaque lines
         if np.any(significant_clusters):
             # Create contours around significant regions
             ax.contour(significant_clusters.astype(float), levels=[0.5], 
-                      colors='black', linewidths=2, linestyles='-')
+                      colors='black', linewidths=2.5, linestyles='-', alpha=1.0)
             
             # Optional: Add filled contours for better visibility
             ax.contourf(significant_clusters.astype(float), levels=[0.5, 1.5], 
@@ -399,14 +415,24 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
     if not common_conditions:
         raise ValueError("No common conditions found between real and synthetic datasets")
     
-    print(f"\nAnalyzing conditions: {list(common_conditions)}")
+    # FIXED ORDER: Always process conditions in HC, MCI, Dementia order
+    desired_order = ['HC', 'MCI', 'Dementia']
+    ordered_conditions = [cond for cond in desired_order if cond in common_conditions]
+    
+    # Add any other conditions that might exist but aren't in the standard list
+    for cond in common_conditions:
+        if cond not in ordered_conditions:
+            ordered_conditions.append(cond)
+    
+    print(f"Available conditions: {list(common_conditions)}")
+    print(f"Processing conditions in fixed order: {ordered_conditions}")
     
     # Use standard 10-20 EEG channel names
     standard_channels = ['FP1', 'F3', 'C3', 'P3', 'O1', 'FP2', 'F4', 'C4', 'P4', 'O2', 
                         'F7', 'T3', 'T5', 'F8', 'T4', 'T6', 'FZ', 'CZ', 'PZ']
     
     # Get number of channels from first dataset
-    first_condition = list(common_conditions)[0]
+    first_condition = ordered_conditions[0]
     n_channels = real_condition_data[first_condition].shape[1]
     
     if n_channels == len(standard_channels):
@@ -419,11 +445,11 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
     print("CALCULATING PSDs FOR ALL CONDITIONS")
     print("="*80)
     
-    # Calculate PSDs for all conditions
+    # Calculate PSDs for all conditions in fixed order
     real_psds_all = {}
     synthetic_psds_all = {}
     
-    for condition in common_conditions:
+    for condition in ordered_conditions:
         print(f"\nProcessing {condition}...")
         
         # Calculate PSDs
@@ -444,17 +470,17 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
         print("APPLYING GLOBAL PSD NORMALIZATION")
         print("="*80)
         
-        # Combine real and synthetic for global normalization
+        # Combine real and synthetic for global normalization in fixed order
         all_psds_combined = {}
-        for condition in common_conditions:
+        for condition in ordered_conditions:
             all_psds_combined[f"{condition}_real"] = real_psds_all[condition]
             all_psds_combined[f"{condition}_synthetic"] = synthetic_psds_all[condition]
         
         # Apply global normalization
         normalized_psds = global_psd_normalization(all_psds_combined)
         
-        # Separate back into real and synthetic
-        for condition in common_conditions:
+        # Separate back into real and synthetic, maintaining order
+        for condition in ordered_conditions:
             real_psds_all[condition] = normalized_psds[f"{condition}_real"]
             synthetic_psds_all[condition] = normalized_psds[f"{condition}_synthetic"]
     
@@ -462,10 +488,11 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
     print("RUNNING STATISTICAL COMPARISONS")
     print("="*80)
     
+    # Store results in ordered dictionary to maintain condition order
     all_results = {}
     
-    # Run statistical analysis for each condition
-    for condition in common_conditions:
+    # Run statistical analysis for each condition in fixed order
+    for condition in ordered_conditions:
         print(f"\n{'='*60}")
         print(f"STATISTICAL ANALYSIS: {condition}")
         print(f"{'='*60}")
@@ -510,12 +537,12 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
     print("CREATING VISUALIZATIONS")
     print("="*80)
     
-    # Create the supervisor-requested figure
+    # Create the supervisor-requested figure with fixed condition order
     supervisor_fig_path = create_supervisor_requested_figure(all_results, freqs, channels, output_dir)
     
     # Save comprehensive results
     results_summary = {
-        'conditions': list(common_conditions),
+        'conditions': ordered_conditions,  # Use ordered conditions
         'freqs': freqs,
         'channels': channels,
         'use_global_normalization': use_global_normalization,
@@ -536,6 +563,7 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
     
     print(f"\nAnalysis complete! Results saved to: {output_dir}")
     print(f"Main figure: {supervisor_fig_path}")
+    print(f"Conditions processed in order: {ordered_conditions}")
     
     return all_results, freqs, channels
 
@@ -543,14 +571,14 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
 if __name__ == "__main__":
     # Specify dataset folders
     real_dataset_folder = '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2'
-    synthetic_dataset_folder = '/home/stud/timlin/bhome/DiffusionEEG/dataset/SYNTH-CAUEEG2-NORMALIZED'
+    synthetic_dataset_folder = '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2_FTSurrogate'
     
     # Run complete analysis
     results, freqs, channels = run_complete_psd_analysis(
         real_dataset_folder=real_dataset_folder,
         synthetic_dataset_folder=synthetic_dataset_folder,
         conditions=['HC', 'MCI', 'Dementia'],
-        output_dir='images/statistical_analysis_full_datasets_SYNTH-CAUEEG2-NORMALIZED',
+        output_dir='images/statistical_analysis_full_datasets_CAUEEG2_FTSurrogate',
         sfreq=200,
         fmin=1,
         fmax=30,

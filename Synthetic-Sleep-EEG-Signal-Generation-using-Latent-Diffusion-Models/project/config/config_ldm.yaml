@@ -8,7 +8,7 @@ train:
     output_dir: '/project/outputs'
     base_path: '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2'
     data_root: '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2'
-    run_dir: 'ldm_caueeg2_4ch_116size'  # Updated to reflect CAUEEG2 dataset and 4 channels
+    run_dir: 'ldm_caueeg2_4ch_116size_no_spec'  # Updated to reflect CAUEEG2 dataset and 4 channels
     drop_last: false
     base_lr: 0.0001
     save_every: 50
