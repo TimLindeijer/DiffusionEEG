@@ -14,7 +14,7 @@ STANDARD_CHANNELS = ['FP1', 'F3', 'C3', 'P3', 'O1', 'FP2', 'F4', 'C4', 'P4', 'O2
 # Class names for labels
 CLASS_NAMES = {0: 'HC (+SMC)', 1: 'MCI', 2: 'Dementia'}
 
-def load_npy_to_epochs(feature_path, label_path=None, ch_names=None, normalize=False, sfreq=200.0):
+def load_npy_to_epochs(feature_path, label_path=None, ch_names=None, normalize=False, sfreq=200.0, debug=True):
     """
     Load .npy files and convert to mne.Epochs objects
     
@@ -73,9 +73,29 @@ def load_npy_to_epochs(feature_path, label_path=None, ch_names=None, normalize=F
         except:
             subject_id = len(subjects_list) + 1  # fallback ID
         
-        # Load feature data
+                # Load feature data
         feature_data = np.load(os.path.join(feature_path, feature_file))
         print(f"  Original shape: {feature_data.shape}")
+        
+        # Debug: Check data statistics
+        if debug:
+            print(f"  Data statistics before processing:")
+            print(f"    Min: {np.min(feature_data):.6f}")
+            print(f"    Max: {np.max(feature_data):.6f}")
+            print(f"    Mean: {np.mean(feature_data):.6f}")
+            print(f"    Std: {np.std(feature_data):.6f}")
+            print(f"    Contains NaN: {np.isnan(feature_data).any()}")
+            print(f"    Contains Inf: {np.isinf(feature_data).any()}")
+            
+            # Check if data is all zeros or very close to zero
+            if np.abs(np.max(feature_data) - np.min(feature_data)) < 1e-10:
+                print(f"    WARNING: Data appears to be constant or near-zero!")
+                
+            # Show some sample values
+            print(f"    Sample values from first epoch, first channel:")
+            if len(feature_data.shape) == 3:
+                sample_data = feature_data[0, :10, 0] if feature_data.shape[2] <= feature_data.shape[1] else feature_data[0, 0, :10]
+                print(f"      {sample_data}")
         
         # Apply min-max normalization if requested
         if normalize:
@@ -89,6 +109,14 @@ def load_npy_to_epochs(feature_path, label_path=None, ch_names=None, normalize=F
                     if max_val > min_val:  # Avoid division by zero
                         feature_data[epoch_idx, :, channel_idx] = (channel_data - min_val) / (max_val - min_val)
             print(f"  Applied min-max normalization")
+            
+            # Debug: Check data after normalization
+            if debug:
+                print(f"  Data statistics after normalization:")
+                print(f"    Min: {np.min(feature_data):.6f}")
+                print(f"    Max: {np.max(feature_data):.6f}")
+                print(f"    Mean: {np.mean(feature_data):.6f}")
+                print(f"    Std: {np.std(feature_data):.6f}")
         
         # Convert data shape if needed
         # Check if data is (epochs, times, channels) and convert to (epochs, channels, times)
@@ -106,6 +134,23 @@ def load_npy_to_epochs(feature_path, label_path=None, ch_names=None, normalize=F
             print(f"  Using data as-is with shape: {data.shape}")
         
         print(f"  Final data shape: {data.shape}")
+        
+        # Debug: Check final data statistics
+        if debug:
+            print(f"  Final data statistics:")
+            print(f"    Min: {np.min(data):.6f}")
+            print(f"    Max: {np.max(data):.6f}")
+            print(f"    Mean: {np.mean(data):.6f}")
+            print(f"    Std: {np.std(data):.6f}")
+            print(f"    Dynamic range: {np.max(data) - np.min(data):.6f}")
+            
+            # Check individual channel statistics
+            if len(data.shape) == 3:
+                print(f"  Channel-wise statistics (first epoch):")
+                for ch_idx in range(min(5, data.shape[1])):  # Show first 5 channels
+                    ch_data = data[0, ch_idx, :]
+                    print(f"    Ch {ch_idx}: min={np.min(ch_data):.6f}, max={np.max(ch_data):.6f}, "
+                          f"mean={np.mean(ch_data):.6f}, std={np.std(ch_data):.6f}")
         
         # Create info object
         n_channels = data.shape[1]
@@ -129,6 +174,23 @@ def load_npy_to_epochs(feature_path, label_path=None, ch_names=None, normalize=F
         print(f"  Created epochs object with {len(epochs)} epochs")
         if label != -1:
             print(f"  Label: {label} ({CLASS_NAMES.get(label, 'Unknown')})")
+        
+        # Debug: Final MNE epochs statistics
+        if debug:
+            epochs_data = epochs.get_data()
+            print(f"  MNE epochs data statistics:")
+            print(f"    Shape: {epochs_data.shape}")
+            print(f"    Min: {np.min(epochs_data):.6f}")
+            print(f"    Max: {np.max(epochs_data):.6f}")
+            print(f"    Mean: {np.mean(epochs_data):.6f}")
+            print(f"    Std: {np.std(epochs_data):.6f}")
+            
+            # Check if we have any signal variation
+            if np.std(epochs_data) < 1e-10:
+                print(f"    WARNING: Very low signal variation - waveforms may appear flat!")
+                print(f"    Consider checking your data preprocessing or normalization.")
+            else:
+                print(f"    Signal variation looks good for plotting.")
     
     print(f"\nLoaded {len(epochs_list)} subjects total")
     
@@ -273,7 +335,7 @@ def plot_epochs_matplotlib(epochs, epoch_idx=0, subject_name="", label=None, out
     print(f"  Saved matplotlib plot: {filepath}")
     return filepath
 
-def plot_single_subject(feature_path, subject_idx=0, label_path=None, normalize=False, output_dir="plots"):
+def plot_single_subject(feature_path, subject_idx=0, label_path=None, normalize=False, output_dir="plots", debug=True):
     """
     Quick function to plot a single subject's data and save as PNG
     
@@ -289,11 +351,13 @@ def plot_single_subject(feature_path, subject_idx=0, label_path=None, normalize=
         Whether to normalize the data
     output_dir : str
         Directory to save plots
+    debug : bool
+        Whether to show debugging information
     """
     
     # Load all data
     epochs_list, labels_list, subjects_list = load_npy_to_epochs(
-        feature_path, label_path, normalize=normalize
+        feature_path, label_path, normalize=normalize, debug=debug
     )
     
     if len(epochs_list) == 0:
@@ -314,6 +378,39 @@ def plot_single_subject(feature_path, subject_idx=0, label_path=None, normalize=
     print(f"Channels: {epochs.ch_names}")
     print(f"Sampling rate: {epochs.info['sfreq']} Hz")
     
+    # Get data for additional debugging
+    data = epochs.get_data()
+    print(f"Data range: {np.min(data):.6f} to {np.max(data):.6f}")
+    print(f"Data std: {np.std(data):.6f}")
+    
+    # Check if data seems problematic
+    if np.std(data) < 1e-10:
+        print("⚠️  WARNING: Data appears to have very low variation!")
+        print("   This could be why waveforms aren't visible.")
+        print("   Possible causes:")
+        print("   - Data is already heavily normalized/standardized")
+        print("   - Data contains mostly zeros or constants")
+        print("   - Preprocessing removed signal variation")
+        
+        # Try to rescale for visualization
+        print("\n🔧 Attempting to rescale data for better visualization...")
+        # Check if we can amplify the signal
+        if np.max(np.abs(data)) > 0:
+            scale_factor = 1.0 / np.max(np.abs(data))
+            print(f"   Applying scale factor: {scale_factor:.2e}")
+            
+            # Create a copy with scaled data
+            scaled_data = data * scale_factor
+            info = epochs.info.copy()
+            epochs_scaled = mne.EpochsArray(scaled_data, info)
+            
+            print(f"   Scaled data range: {np.min(scaled_data):.6f} to {np.max(scaled_data):.6f}")
+            print(f"   Scaled data std: {np.std(scaled_data):.6f}")
+            
+            # Use the scaled epochs for plotting
+            epochs = epochs_scaled
+            subject_name += "_scaled"
+    
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
     
@@ -325,7 +422,87 @@ def plot_single_subject(feature_path, subject_idx=0, label_path=None, normalize=
     print(f"\nSaving matplotlib plot to {output_dir}...")
     plot_epochs_matplotlib(epochs, epoch_idx=0, subject_name=subject_name, label=label, output_dir=output_dir)
     
+    # Additional diagnostic plot - show raw data values
+    if debug:
+        print(f"\nSaving diagnostic plot...")
+        save_diagnostic_plot(epochs, subject_name, label, output_dir)
+    
     print(f"\nAll plots saved in: {output_dir}")
+
+def save_diagnostic_plot(epochs, subject_name="", label=None, output_dir="plots"):
+    """
+    Create a diagnostic plot showing data statistics and sample values
+    """
+    import matplotlib
+    matplotlib.use('Agg')
+    
+    data = epochs.get_data()  # Shape: (epochs, channels, times)
+    
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    fig.suptitle(f"Diagnostic Plot - {subject_name}", fontsize=14)
+    
+    # 1. Data distribution histogram
+    axes[0, 0].hist(data.flatten(), bins=50, alpha=0.7)
+    axes[0, 0].set_title('Data Value Distribution')
+    axes[0, 0].set_xlabel('Value')
+    axes[0, 0].set_ylabel('Frequency')
+    axes[0, 0].grid(True, alpha=0.3)
+    
+    # 2. Channel-wise statistics
+    channel_means = np.mean(data, axis=(0, 2))  # Mean across epochs and time
+    channel_stds = np.std(data, axis=(0, 2))    # Std across epochs and time
+    
+    x_channels = range(len(channel_means))
+    axes[0, 1].bar(x_channels, channel_means, alpha=0.7, label='Mean')
+    axes[0, 1].set_title('Channel-wise Mean Values')
+    axes[0, 1].set_xlabel('Channel')
+    axes[0, 1].set_ylabel('Mean Value')
+    axes[0, 1].grid(True, alpha=0.3)
+    
+    # 3. Channel-wise standard deviations
+    axes[1, 0].bar(x_channels, channel_stds, alpha=0.7, color='orange', label='Std')
+    axes[1, 0].set_title('Channel-wise Standard Deviations')
+    axes[1, 0].set_xlabel('Channel')
+    axes[1, 0].set_ylabel('Standard Deviation')
+    axes[1, 0].grid(True, alpha=0.3)
+    
+    # 4. Sample waveform (first epoch, first channel)
+    times = epochs.times
+    sample_data = data[0, 0, :]  # First epoch, first channel
+    axes[1, 1].plot(times, sample_data)
+    axes[1, 1].set_title(f'Sample Waveform (Epoch 0, {epochs.ch_names[0]})')
+    axes[1, 1].set_xlabel('Time (s)')
+    axes[1, 1].set_ylabel('Amplitude')
+    axes[1, 1].grid(True, alpha=0.3)
+    
+    # Add statistics text
+    stats_text = f"""Data Statistics:
+    Shape: {data.shape}
+    Min: {np.min(data):.6f}
+    Max: {np.max(data):.6f}
+    Mean: {np.mean(data):.6f}
+    Std: {np.std(data):.6f}
+    Range: {np.max(data) - np.min(data):.6f}
+    """
+    
+    fig.text(0.02, 0.02, stats_text, fontsize=10, verticalalignment='bottom',
+             bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray", alpha=0.8))
+    
+    plt.tight_layout()
+    plt.subplots_adjust(bottom=0.15)  # Make room for statistics text
+    
+    # Save the diagnostic plot
+    filename = f"diagnostic_{subject_name}"
+    if label is not None and label != -1:
+        filename += f"_label{label}"
+    filename += ".png"
+    
+    filepath = os.path.join(output_dir, filename)
+    plt.savefig(filepath, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close(fig)
+    
+    print(f"  Saved diagnostic plot: {filepath}")
+    return filepath
 
 def plot_multiple_subjects(feature_path, label_path=None, normalize=False, output_dir="plots", max_subjects=5):
     """
@@ -387,9 +564,9 @@ def main():
     """
     
     # MODIFY THESE PATHS TO MATCH YOUR DATA
-    feature_path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/DM_NO_SPEC/Feature'
-    label_path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/DM_NO_SPEC/Label'  # Set to None if no labels
-    output_dir = 'images/eeg_plots/DM_NO_SPEC'  # Directory where PNG files will be saved
+    feature_path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized_FIX_NO_SPEC/Feature'
+    label_path = '/home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized_FIX_NO_SPEC/Label'  # Set to None if no labels
+    output_dir = 'images/eeg_plots/2LDM_PSD_Normalized_FIX_NO_SPEC'  # Directory where PNG files will be saved
     
     # Check if paths exist
     if not os.path.exists(feature_path):
@@ -412,7 +589,8 @@ def main():
         subject_idx=0,  # Change this to plot different subjects
         label_path=label_path,
         normalize=False,  # Set to True if you want normalization
-        output_dir=output_dir
+        output_dir=output_dir,
+        debug=True  # Enable debugging to see data statistics
     )
     
     # Uncomment the line below to plot multiple subjects instead
