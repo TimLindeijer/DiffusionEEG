@@ -8,6 +8,6 @@
 mkdir -p dataset
 
 uenv miniconda3-py311
-conda activate test_env
+conda activate preprocess-eeg
 #pip list
 python -u preprocess/caueeg2.py

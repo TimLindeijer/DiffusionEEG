@@ -1,4 +1,4 @@
-name: test_env
+name: preprocess-eeg
 channels:
   - conda-forge
   - defaults
