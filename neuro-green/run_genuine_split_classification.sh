@@ -9,9 +9,9 @@
 # CONFIGURATION - CHANGE THESE VALUES
 # =====================================
 # Set the combination you want to run (True/False)
-SHUFFLE=false
+SHUFFLE=true
 SHUFFLE_FIRST_EPOCH=false
-RANDOMIZE_EPOCHS=true
+RANDOMIZE_EPOCHS=false
 
 # =====================================
 # AUTOMATIC CONFIGURATION

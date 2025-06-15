@@ -1,4 +1,4 @@
-name: green-env
+name: green-test
 dependencies:
   - python>=3.6
   - pytorch>=1.9

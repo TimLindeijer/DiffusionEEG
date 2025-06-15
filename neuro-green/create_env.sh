@@ -1,7 +1,6 @@
 #!/bin/bash
-#SBATCH --gres=gpu:0
-#SBATCH --partition=gpu
-#SBATCH --time=03:15:00
+#SBATCH --partition=cpu64
+#SBATCH --time=24:00:00
 #SBATCH --job-name=env_setup_compile
 #SBATCH --output=outputs/env_setup.out
  
