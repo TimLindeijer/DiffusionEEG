@@ -624,14 +624,14 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
 if __name__ == "__main__":
     # Specify dataset folders
     real_dataset_folder = '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2'
-    synthetic_dataset_folder = '/home/stud/timlin/bhome/DiffusionEEG/dataset/SYNTH-CAUEEG2-NORMALIZED'
+    synthetic_dataset_folder = '/home/stud/timlin/bhome/DiffusionEEG/dataset/PURE_LDM_PSD_Normalized'
     
     # Run complete analysis
     results, freqs, channels = run_complete_psd_analysis(
         real_dataset_folder=real_dataset_folder,
         synthetic_dataset_folder=synthetic_dataset_folder,
         conditions=['HC', 'MCI', 'Dementia'],
-        output_dir='images/5_95/statistical_analysis_full_datasets_SYNTH-CAUEEG2-NORMALIZED',
+        output_dir='images/5_95/statistical_analysis_full_datasets_PURE_LDM_PSD_Normalized',
         sfreq=200,
         fmin=1,
         fmax=30,
