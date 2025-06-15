@@ -10,7 +10,7 @@ mkdir -p outputs
 # Activate environment
 uenv miniconda3-py38
 conda env create -f LEAD/environment.yml
-conda activate test-lead
+conda activate lead-env
 # For CUDA 12.1
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 

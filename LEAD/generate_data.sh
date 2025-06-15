@@ -8,7 +8,7 @@
 # Activate environment
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
 uenv miniconda3-py38
-conda activate LEADEEG
+conda activate lead-env
 
 python /mnt/beegfs/home/timlin/DiffusionEEG/LEAD/src/synthetic_data_generator.py \
   --checkpoints_path "checkpoints/LEAD/diffusion/LEAD/Simplified-Diffusion-LR-0001-SS-1000-DS2-dementia/nh8_el12_dm128_df256_seed41/checkpoint.pth" \

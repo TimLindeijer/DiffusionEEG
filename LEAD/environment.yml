@@ -1,4 +1,4 @@
-name: test-lead
+name: lead-env
 channels:
   - conda-forge
   - defaults

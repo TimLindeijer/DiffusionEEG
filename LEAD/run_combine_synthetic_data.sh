@@ -6,6 +6,6 @@
  
 # Activate environment
 uenv miniconda3-py38
-conda activate test-lead
+conda activate lead-env
 # pip install mne
 python -u LEAD/combine_synthetic_data.py
