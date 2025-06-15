@@ -9,4 +9,7 @@
 uenv verbose cuda-11.8.0 cudnn-11.x-8.7.0
 uenv miniconda3-py39
 conda env create -f neuro-green/environment.yml -vvv
+pip install wandb
+pip install geotorch
+pip install lightning
 
