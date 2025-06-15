@@ -1,3 +1,38 @@
+# Acknowledgments
+
+This project builds upon the GREEN architecture developed by Paillard et al. and the synthetic EEG signal generation work by Aristimunha et al. We use their code for EEG signal processing, biomarker exploration, and synthetic data generation.
+
+**References:**
+
+GREEN Architecture:
+- Repository: https://github.com/Roche/neuro-green/tree/main
+```bibtex
+@article{paillard2025,
+    author = {Paillard, Joseph and Hipp, J{\"o}rg F. and Engemann, Denis A.},
+    title = {GREEN: A lightweight architecture using learnable wavelets and Riemannian geometry for biomarker exploration with EEG signals},
+    doi = {10.1016/j.patter.2025.101182},
+    url = {https://doi.org/10.1016/j.patter.2025.101182},
+    journal = {Patterns},
+    publisher = {Elsevier},
+    isbn = {2666-3899}
+}
+```
+
+Synthetic EEG Generation:
+- Repository: https://github.com/bruAristimunha/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models
+```bibtex
+@inproceedings{
+aristimunha2023synthetic,
+title={{Synthetic Sleep {EEG} Signal Generation using Latent Diffusion Models}},
+author={Bruno Aristimunha and Raphael Yokoingawa de Camargo and Sylvain Chevallier and Oeslle Lucena and Adam Thomas and M. Jorge Cardoso and Walter Lopez Pinaya and Jessica Dafflon},
+booktitle={Deep Generative Models for Health Workshop NeurIPS 2023},
+year={2023},
+}
+```
+LEAD Model:
+- Repository: https://github.com/DL4mHealth/LEAD
+
+
 # Instructions to Compile and Run System
 
 ## Prerequisites
@@ -40,6 +75,7 @@ tail -f outputs/env_setup.out
 ```
 
 ### 1.3 Configure User Path
+
 
 Before running the preprocessing pipeline, you need to update the user path in the preprocessing script to match your system:
 
