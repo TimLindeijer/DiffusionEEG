@@ -1,32 +1,25 @@
-name: ldm-test2
+name: ldm-env
 channels:
   - defaults
   - conda-forge
-  - pytorch
 dependencies:
   - python=3.9
   - pip=23.3
-  - numpy
-  - scipy
-  - matplotlib
-  - pandas
-  - scikit-learn
-  - scikit-image
-  - tqdm
-  # PyTorch (proper conda install)
-  - pytorch::pytorch
-  - pytorch::torchvision  
-  - pytorch::torchaudio
   - pip:
-    # ML/DL packages
+    - matplotlib
+    - omegaconf==2.1.1
+    - pandas
+    - scikit-learn
+    - scipy
+    - tensorboardX
+    - tqdm
+    - scikit-image
+    - mlflow==2.4.0
+    - tensorboard
     - monai
     - monai-generative
     - lpips
-    - omegaconf==2.1.1
-    - mlflow==2.4.0
-    - tensorboard
-    - tensorboardX
-    - wandb
-    # EEG/Neuroscience
-    - mne
     - git+https://github.com/braindecode/braindecode.git#egg=braindecode
+    - torch
+    - torchvision
+    - torchaudio

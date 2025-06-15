@@ -7,12 +7,12 @@
 # Activate environment
 uenv miniconda3-py39
 conda env create -f Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/environment.yml
-# pip install monai-generative
-# pip install lpips
-# pip install omegaconf
-# pip install tensorboard
-# pip install mlflow
-# pip install mne
-# pip install tensorboardX
-# pip install wandb
+pip install monai-generative
+pip install lpips
+pip install omegaconf
+pip install tensorboard
+pip install mlflow
+pip install mne
+pip install tensorboardX
+pip install wandb
 
