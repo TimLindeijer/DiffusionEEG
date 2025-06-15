@@ -7,6 +7,7 @@
 # Activate environment
 uenv miniconda3-py39
 conda env create -f Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/environment.yml
+conda activate ldm-env
 pip install monai-generative
 pip install lpips
 pip install omegaconf

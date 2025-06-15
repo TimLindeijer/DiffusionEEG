@@ -1,124 +1,3 @@
-def create_supervisor_requested_figure(all_results, freqs, channels, output_dir):
-    """
-    Create the 3x2 grid figure as requested by supervisor:
-    - Top row: PSD comparisons for each condition
-    - Bottom row: Effect size heatmaps with significance contours
-    
-    FIXED: Ensures conditions are always in HC, MCI, Dementia order
-    ADDED: Diagnostic prints to check for identical synthetic data
-    """
-    
-    # FIXED ORDER: Always HC, MCI, Dementia
-    desired_order = ['HC', 'MCI', 'Dementia']
-    available_conditions = list(all_results.keys())
-    
-    # Get conditions in the desired order
-    conditions = [cond for cond in desired_order if cond in available_conditions]
-    
-    # Add any other conditions that might exist but aren't in the standard list
-    for cond in available_conditions:
-        if cond not in conditions:
-            conditions.append(cond)
-    
-    print(f"Available conditions: {available_conditions}")
-    print(f"Plotting conditions in fixed order: {conditions}")
-    
-    # DIAGNOSTIC: Check if synthetic PSDs are actually different
-    print("\n" + "="*60)
-    print("DIAGNOSTIC: Checking synthetic PSD differences")
-    print("="*60)
-    
-    synthetic_stats = {}
-    for condition in conditions:
-        synthetic_psds = all_results[condition]['synthetic_psds']
-        synthetic_grand_avg = np.mean(synthetic_psds, axis=(0, 1))
-        synthetic_stats[condition] = {
-            'mean': np.mean(synthetic_grand_avg),
-            'std': np.std(synthetic_grand_avg),
-            'max': np.max(synthetic_grand_avg),
-            'min': np.min(synthetic_grand_avg)
-        }
-        print(f"{condition} synthetic - Mean: {synthetic_stats[condition]['mean']:.6f}, "
-              f"Std: {synthetic_stats[condition]['std']:.6f}, "
-              f"Range: {synthetic_stats[condition]['min']:.6f} to {synthetic_stats[condition]['max']:.6f}")
-    
-    # Check if synthetic data is identical between conditions
-    if len(conditions) >= 2:
-        synth_1 = np.mean(all_results[conditions[0]]['synthetic_psds'], axis=(0, 1))
-        synth_2 = np.mean(all_results[conditions[1]]['synthetic_psds'], axis=(0, 1))
-        correlation = np.corrcoef(synth_1, synth_2)[0, 1]
-        max_diff = np.max(np.abs(synth_1 - synth_2))
-        print(f"\nCorrelation between {conditions[0]} and {conditions[1]} synthetic PSDs: {correlation:.6f}")
-        print(f"Max absolute difference: {max_diff:.6f}")
-        
-        if correlation > 0.99 and max_diff < 1e-6:
-            print("⚠️  WARNING: Synthetic PSDs appear nearly identical between conditions!")
-            print("   This suggests the synthetic data generation didn't preserve condition differences.")
-        elif correlation > 0.95:
-            print("⚠️  WARNING: Synthetic PSDs are very similar between conditions (r > 0.95)")
-    
-    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
-    
-    # Define frequency ticks
-    freq_ticks = np.linspace(0, len(freqs)-1, 6).astype(int)
-    freq_labels = [f'{freqs[i]:.1f}' for i in freq_ticks]
-    
-    # Top row: PSD comparisons
-    for idx, condition in enumerate(conditions):
-        ax = axes[0, idx]
-        results = all_results[condition]
-        
-        real_psds = results['real_psds'] 
-        synthetic_psds = results['synthetic_psds']
-        
-        # Average across epochs and channels for grand average
-        real_grand_avg = np.mean(real_psds, axis=(0, 1))
-        synthetic_grand_avg = np.mean(synthetic_psds, axis=(0, 1))
-        
-        # OPTION 1: Use semilogy (current)
-        ax.semilogy(freqs, real_grand_avg, 'b-', linewidth=2.5, label='Real EEG', alpha=0.9)
-        ax.semilogy(freqs, synthetic_grand_avg, 'r-', linewidth=2.5, label='Synthetic EEG', alpha=0.9)
-        
-        # OPTION 2: Try linear scale to see differences better (uncomment to test)
-        # ax.plot(freqs, real_grand_avg, 'b-', linewidth=2.5, label='Real EEG', alpha=0.9)
-        # ax.plot(freqs, synthetic_grand_avg, 'r-', linewidth=2.5, label='Synthetic EEG', alpha=0.9)
-        
-        ax.set_xlabel('Frequency (Hz)', fontsize=12)
-        ax.set_ylabel('PSD (µV²/Hz)', fontsize=12)
-        ax.set_title(f'{condition} - PSD Comparison', fontsize=14, fontweight='bold')
-        ax.legend(fontsize=11)
-        ax.grid(True, alpha=0.3)
-        
-        # Add frequency band shading
-        alpha_band = (freqs >= 8) & (freqs <= 12)
-        if np.any(alpha_band):
-            ax.axvspan(8, 12, alpha=0.1, color='green', label='Alpha' if idx == 0 else "")
-    
-    # Bottom row: Effect size heatmaps with significance contours
-    for idx, condition in enumerate(conditions):
-        ax = axes[1, idx]
-        results = all_results[condition]
-        
-        effect_sizes = results['effect_sizes']
-        significant_clusters = results['significant_clusters']
-        
-        # Create centered colormap for effect sizes (centered at 0)
-        vmax = np.max(np.abs(effect_sizes))
-        vmin = -vmax
-        
-        # Plot effect sizes
-        im = ax.imshow(effect_sizes, aspect='auto', cmap='RdBu_r', 
-                      interpolation='nearest', vmin=vmin, vmax=vmax)
-        
-        # Add significance contours with more opaque lines
-        if np.any(significant_clusters):
-            # Create contours around significant regions
-            ax.contour(significant_clusters.astype(float), levels=[0.5], 
-                      colors='black', linewidths=2.5, linestyles='-', alpha=1.0)
-            
-            # Optional: Add filled contours for better visibility
-            ax.contourf(significant_clusters.astype(float), levels=[0.5, 1.5], 
-                       colors=['none'], hatches=['///'], alpha=0.15)
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -400,10 +279,12 @@ class PSDStatisticalComparison:
 def create_supervisor_requested_figure(all_results, freqs, channels, output_dir):
     """
     Create the 3x2 grid figure as requested by supervisor:
-    - Top row: PSD comparisons for each condition
+    - Top row: PSD comparisons for each condition with 5-95% confidence intervals
     - Bottom row: Effect size heatmaps with significance contours
     
     FIXED: Ensures conditions are always in HC, MCI, Dementia order
+    ADDED: Diagnostic prints to check for identical synthetic data
+    ADDED: 5-95% confidence intervals on PSD plots
     """
     
     # FIXED ORDER: Always HC, MCI, Dementia
@@ -421,13 +302,47 @@ def create_supervisor_requested_figure(all_results, freqs, channels, output_dir)
     print(f"Available conditions: {available_conditions}")
     print(f"Plotting conditions in fixed order: {conditions}")
     
+    # DIAGNOSTIC: Check if synthetic PSDs are actually different
+    print("\n" + "="*60)
+    print("DIAGNOSTIC: Checking synthetic PSD differences")
+    print("="*60)
+    
+    synthetic_stats = {}
+    for condition in conditions:
+        synthetic_psds = all_results[condition]['synthetic_psds']
+        synthetic_grand_avg = np.mean(synthetic_psds, axis=(0, 1))
+        synthetic_stats[condition] = {
+            'mean': np.mean(synthetic_grand_avg),
+            'std': np.std(synthetic_grand_avg),
+            'max': np.max(synthetic_grand_avg),
+            'min': np.min(synthetic_grand_avg)
+        }
+        print(f"{condition} synthetic - Mean: {synthetic_stats[condition]['mean']:.6f}, "
+              f"Std: {synthetic_stats[condition]['std']:.6f}, "
+              f"Range: {synthetic_stats[condition]['min']:.6f} to {synthetic_stats[condition]['max']:.6f}")
+    
+    # Check if synthetic data is identical between conditions
+    if len(conditions) >= 2:
+        synth_1 = np.mean(all_results[conditions[0]]['synthetic_psds'], axis=(0, 1))
+        synth_2 = np.mean(all_results[conditions[1]]['synthetic_psds'], axis=(0, 1))
+        correlation = np.corrcoef(synth_1, synth_2)[0, 1]
+        max_diff = np.max(np.abs(synth_1 - synth_2))
+        print(f"\nCorrelation between {conditions[0]} and {conditions[1]} synthetic PSDs: {correlation:.6f}")
+        print(f"Max absolute difference: {max_diff:.6f}")
+        
+        if correlation > 0.99 and max_diff < 1e-6:
+            print("⚠️  WARNING: Synthetic PSDs appear nearly identical between conditions!")
+            print("   This suggests the synthetic data generation didn't preserve condition differences.")
+        elif correlation > 0.95:
+            print("⚠️  WARNING: Synthetic PSDs are very similar between conditions (r > 0.95)")
+    
     fig, axes = plt.subplots(2, 3, figsize=(18, 12))
     
     # Define frequency ticks
     freq_ticks = np.linspace(0, len(freqs)-1, 6).astype(int)
     freq_labels = [f'{freqs[i]:.1f}' for i in freq_ticks]
     
-    # Top row: PSD comparisons
+    # Top row: PSD comparisons with confidence intervals
     for idx, condition in enumerate(conditions):
         ax = axes[0, idx]
         results = all_results[condition]
@@ -435,17 +350,34 @@ def create_supervisor_requested_figure(all_results, freqs, channels, output_dir)
         real_psds = results['real_psds'] 
         synthetic_psds = results['synthetic_psds']
         
-        # Average across epochs and channels for grand average
-        real_grand_avg = np.mean(real_psds, axis=(0, 1))
-        synthetic_grand_avg = np.mean(synthetic_psds, axis=(0, 1))
+        # Average across channels first, then calculate statistics across epochs
+        # Shape: (n_epochs, n_channels, n_freqs) -> (n_epochs, n_freqs)
+        real_channel_avg = np.mean(real_psds, axis=1)  # Average across channels
+        synthetic_channel_avg = np.mean(synthetic_psds, axis=1)  # Average across channels
         
-        ax.semilogy(freqs, real_grand_avg, 'b-', linewidth=2.5, label='Real EEG', alpha=0.9)
-        ax.semilogy(freqs, synthetic_grand_avg, 'r-', linewidth=2.5, label='Synthetic EEG', alpha=0.9)
+        # Calculate mean and percentiles across epochs for each frequency
+        real_mean = np.mean(real_channel_avg, axis=0)
+        real_p5 = np.percentile(real_channel_avg, 5, axis=0)
+        real_p95 = np.percentile(real_channel_avg, 95, axis=0)
+        
+        synthetic_mean = np.mean(synthetic_channel_avg, axis=0)
+        synthetic_p5 = np.percentile(synthetic_channel_avg, 5, axis=0)
+        synthetic_p95 = np.percentile(synthetic_channel_avg, 95, axis=0)
+        
+        # Plot confidence intervals first (so they appear behind the lines)
+        ax.fill_between(freqs, real_p5, real_p95, 
+                       color='blue', alpha=0.2, label='Real 5-95%')
+        ax.fill_between(freqs, synthetic_p5, synthetic_p95, 
+                       color='red', alpha=0.2, label='Synthetic 5-95%')
+        
+        # Plot mean lines on top
+        ax.semilogy(freqs, real_mean, 'b-', linewidth=2.5, label='Real EEG (mean)', alpha=0.9)
+        ax.semilogy(freqs, synthetic_mean, 'r-', linewidth=2.5, label='Synthetic EEG (mean)', alpha=0.9)
         
         ax.set_xlabel('Frequency (Hz)', fontsize=12)
         ax.set_ylabel('PSD (µV²/Hz)', fontsize=12)
         ax.set_title(f'{condition} - PSD Comparison', fontsize=14, fontweight='bold')
-        ax.legend(fontsize=11)
+        ax.legend(fontsize=10, loc='upper right')
         ax.grid(True, alpha=0.3)
         
         # Add frequency band shading
@@ -692,19 +624,19 @@ def run_complete_psd_analysis(real_dataset_folder, synthetic_dataset_folder, out
 if __name__ == "__main__":
     # Specify dataset folders
     real_dataset_folder = '/home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2'
-    synthetic_dataset_folder = '/home/stud/timlin/bhome/DiffusionEEG/dataset/DM_NO_SPEC'
+    synthetic_dataset_folder = '/home/stud/timlin/bhome/DiffusionEEG/dataset/SYNTH-CAUEEG2-NORMALIZED'
     
     # Run complete analysis
     results, freqs, channels = run_complete_psd_analysis(
         real_dataset_folder=real_dataset_folder,
         synthetic_dataset_folder=synthetic_dataset_folder,
         conditions=['HC', 'MCI', 'Dementia'],
-        output_dir='images/test_statistical_analysis_full_datasets_DM_NO_SPEC_FALSE',
+        output_dir='images/5_95/statistical_analysis_full_datasets_SYNTH-CAUEEG2-NORMALIZED',
         sfreq=200,
         fmin=1,
         fmax=30,
         n_permutations=500,  # Increase for final analysis
-        use_global_normalization=False  # Test both True and False
+        use_global_normalization=True  # Test both True and False
     )
     
     print("\nAnalysis complete! Check the output directory for results.")
