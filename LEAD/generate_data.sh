@@ -2,8 +2,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=48:00:00
-#SBATCH --job-name=Generate-dementia-Data
-#SBATCH --output=outputs/gen_dementia_data.out
+#SBATCH --job-name=gen_lead_data
+#SBATCH --output=outputs/gen_lead_data_%j.out
  
 # Activate environment
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0

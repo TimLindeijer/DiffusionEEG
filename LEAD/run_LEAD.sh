@@ -3,7 +3,7 @@
 #SBATCH --partition=gpu
 #SBATCH --time=48:00:00
 #SBATCH --job-name=Simplified-Diffusion-LR-0001-SS-1000-DS2
-#SBATCH --output=outputs/Simplified_Diffusion_ArcMargin_LR_0001_SS_1000_DS2.out
+#SBATCH --output=outputs/Simplified_Diffusion_ArcMargin_LR_0001_SS_1000_DS2_%j.out
  
 # Activate environment
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0

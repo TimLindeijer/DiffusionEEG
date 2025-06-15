@@ -4,15 +4,15 @@ import glob
 import shutil
 
 # Define paths
-output_root = "dataset/SYNTH-CAUEEG2"
+output_root = "/home/stud/timlin/bhome/DiffusionEEG/dataset/SYNTH-CAUEEG2"
 label_path = os.path.join(output_root, 'Label')
 feature_path = os.path.join(output_root, 'Feature')
 metadata_path = os.path.join(output_root, 'Metadata')  # Add metadata directory
 
 # Source paths
-hc_path = "dataset/SYNTH-CAUEEG2-HC"
-mci_path = "dataset/SYNTH-CAUEEG2-MCI"
-dementia_path = "dataset/SYNTH-CAUEEG2-dementia"
+hc_path = "/home/stud/timlin/bhome/DiffusionEEG/dataset/SYNTH-CAUEEG2-HC"
+mci_path = "/home/stud/timlin/bhome/DiffusionEEG/dataset/SYNTH-CAUEEG2-MCI"
+dementia_path = "/home/stud/timlin/bhome/DiffusionEEG/dataset/SYNTH-CAUEEG2-dementia"
 
 # Class distribution (as provided)
 class_0_count = 439  # HC
