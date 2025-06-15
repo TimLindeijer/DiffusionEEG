@@ -4,6 +4,9 @@
 #SBATCH --job-name=preprocess_caueeg2
 #SBATCH --output=outputs/preprocess_caueeg2.out
 
+# Create dataset directory if it doesn't exist
+mkdir -p dataset
+
 uenv miniconda3-py311
 conda activate test_env
 #pip list
