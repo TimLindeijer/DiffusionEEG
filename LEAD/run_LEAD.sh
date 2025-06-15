@@ -8,7 +8,7 @@
 # Activate environment
 uenv verbose cuda-12.1.0 cudnn-12.x-9.0.0
 uenv miniconda3-py38
-conda activate LEADEEG
+conda activate lead-env
 # pip install torch
 # pip install reformer-pytorch
 
