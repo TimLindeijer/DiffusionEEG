@@ -511,3 +511,99 @@ sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_g
 # Generate dementia data
 sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_generate_eeg.sh dementia
 ```
+
+## Step 5: Dataset Augmentation and Creation
+
+### 5.1 Create Expanded Datasets
+
+Using the existing `ldm-env` environment from the Sleep folder, you can now create augmented datasets that combine genuine and synthetic data.
+
+**Note**: Continue using the same environment and stay in the `Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models` directory for these operations.
+
+#### 5.1.1 Configure Dataset Paths
+
+Update the paths in `Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_augment_dataset.sh` on lines 20 and 21:
+
+```bash
+# Line 20 - Genuine dataset path:
+--genuine_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
+# Line 21 - Synthetic dataset path:
+--synthetic_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/DM_SPEC_MINUS_2 \
+```
+
+Replace `/home/stud/timlin/bhome/DiffusionEEG` with your actual DiffusionEEG base directory path, and update the synthetic dataset path to match the dataset you want to use for augmentation.
+
+#### 5.1.2 Run Dataset Augmentation
+
+Execute the dataset augmentation script:
+
+```bash
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_augment_dataset.sh
+```
+
+This script will create multiple augmented datasets with different synthetic data percentages (20%, 40%, 60%, 80%, 100%) while maintaining a stratified test split of 20%.
+
+### 5.2 Create Balanced Datasets
+
+To create balanced datasets where all classes have equal representation, you can use the balance dataset script.
+
+#### 5.2.1 Configure Balance Dataset Paths
+
+Update the paths in `Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_balance_dataset.sh` on lines 20, 21, and 22:
+
+```bash
+# Line 20 - Genuine dataset path:
+--genuine_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
+# Line 21 - Synthetic dataset path:
+--synthetic_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2_FTSurrogate \
+# Line 22 - Output directory path:
+--output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/ftsurrogate_balanced_datasets \
+```
+
+Also update the dataset type on line 26:
+```bash
+--dataset_type augmented  # Change to either "augmented" or "synthetic"
+```
+
+Replace `/home/stud/timlin/bhome/DiffusionEEG` with your actual DiffusionEEG base directory path.
+
+#### 5.2.2 Run Dataset Balancing
+
+Execute the dataset balancing script:
+
+```bash
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_balance_dataset.sh
+```
+
+This script balances the dataset to the maximum class size while maintaining a stratified test split of 20%.
+
+### 5.3 Create Discrimination Datasets
+
+To create datasets for discriminating between genuine and synthetic/augmented data, you can use the discrimination dataset script.
+
+#### 5.3.1 Configure Discrimination Dataset Paths
+
+Update the paths in `Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_discrimination_datasets.sh` on lines 20, 21, 22, and 23:
+
+```bash
+# Line 20 - Genuine dataset path:
+--genuine_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
+# Line 21 - Comparison dataset path:
+--comparison_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/DM_NO_SPEC \
+# Line 22 - Comparison type:
+--comparison_type synthetic \  # Change to either "synthetic" or "augmented"
+# Line 23 - Output directory path:
+--output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/dm_no_spec_discrimination_synthetic \
+```
+
+Replace `/home/stud/timlin/bhome/DiffusionEEG` with your actual DiffusionEEG base directory path.
+
+#### 5.3.2 Run Discrimination Dataset Creation
+
+Execute the discrimination dataset creation script:
+
+```bash
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_discrimination_datasets.sh
+```
+
+This script creates datasets for binary classification between genuine and synthetic/augmented data with a 20% validation split.
