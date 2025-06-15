@@ -615,9 +615,38 @@ sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_d
 
 This script creates datasets for binary classification between genuine and synthetic/augmented data with a 20% validation split.
 
-## Step 6: Neuro-Green Classification
+## Step 6: FTSurrogate Data Generation
 
-### 6.1 Create Neuro-Green Environment
+### 6.1 Generate FTSurrogate Data
+
+To create Fourier Transform surrogate data for comparison with diffusion model outputs, use the FTSurrogate augmentation script.
+
+#### 6.1.1 Configure FTSurrogate Paths
+
+Update the paths in `augmentation/run_augment_dataset.sh`:
+
+```bash
+# Input dataset path:
+--input_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
+# Output dataset path:
+--output_dataset /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2_FTSurrogate \
+```
+
+Replace `/home/stud/timlin/bhome/DiffusionEEG` with your actual DiffusionEEG base directory path.
+
+#### 6.1.2 Run FTSurrogate Generation
+
+Execute the FTSurrogate generation:
+
+```bash
+sbatch augmentation/run_augment_dataset.sh
+```
+
+**Note**: This script uses the existing `ldm-env` environment from the Sleep folder. The FTSurrogate method generates synthetic data by preserving the power spectrum while randomizing the phases, providing a baseline comparison for evaluating diffusion model performance.
+
+## Step 7: Neuro-Green Classification
+
+### 7.1 Create Neuro-Green Environment
 
 First, create the required conda environment for the neuro-green classification:
 
@@ -625,11 +654,11 @@ First, create the required conda environment for the neuro-green classification:
 sbatch neuro-green/create_env.sh
 ```
 
-### 6.2 Run Classification on Genuine Data
+### 7.2 Run Classification on Genuine Data
 
 To test the classification performance on genuine data only, you need to configure and run the training script.
 
-#### 6.2.1 Configure Training Parameters
+#### 7.2.1 Configure Training Parameters
 
 Update the configuration in `neuro-green/run_genuine_split_classification.sh`:
 
@@ -658,7 +687,7 @@ RUN_NAME="MLR_GENUINE_${COMBINATION}_$(date +%Y%m%d_%H%M%S)"
 
 Replace `/home/stud/timlin/bhome/DiffusionEEG` with your actual DiffusionEEG base directory path.
 
-#### 6.2.2 Run Genuine Data Classification
+#### 7.2.2 Run Genuine Data Classification
 
 Execute the classification training:
 
@@ -668,11 +697,11 @@ sbatch neuro-green/run_genuine_split_classification.sh
 
 This will train the GREEN model on genuine data only with your specified randomization settings and save results with compression for easy access.
 
-### 6.3 Run Classification on Synthetic or Augmented Data
+### 7.3 Run Classification on Synthetic or Augmented Data
 
 To test classification performance on synthetic or augmented datasets, use the LDM classification script.
 
-#### 6.3.1 Configure LDM Classification Parameters
+#### 7.3.1 Configure LDM Classification Parameters
 
 Update the configuration in `neuro-green/run_ldm_classification.sh`:
 
@@ -693,7 +722,7 @@ RUN_NAME="NO_TEST_PURE_LDM_PSD_Normalized_${COMBINATION}_$(date +%Y%m%d_%H%M%S)"
 
 Replace `/home/stud/timlin/bhome/DiffusionEEG` with your actual DiffusionEEG base directory path, and update the dataset name (`PURE_LDM_PSD_Normalized`) to match the synthetic or augmented dataset you want to test.
 
-#### 6.3.2 Run Synthetic/Augmented Data Classification
+#### 7.3.2 Run Synthetic/Augmented Data Classification
 
 Execute the classification training:
 
@@ -703,11 +732,11 @@ sbatch neuro-green/run_ldm_classification.sh
 
 This script will train and test the GREEN model on the same synthetic or augmented dataset (no separate test set) with your specified randomization settings.
 
-### 6.4 Run Synthetic-to-Genuine Classification
+### 7.4 Run Synthetic-to-Genuine Classification
 
 To evaluate how well models trained on synthetic data perform on genuine data, use the cross-domain classification script.
 
-#### 6.4.1 Configure Cross-Domain Classification Parameters
+#### 7.4.1 Configure Cross-Domain Classification Parameters
 
 Update the configuration in `neuro-green/run_ldm_to_caueeg_classification.sh`:
 
@@ -733,7 +762,7 @@ RUN_NAME="MLR_DM_SPEC_MINUS_2_${COMBINATION}_$(date +%Y%m%d_%H%M%S)"
 
 Replace `/home/stud/timlin/bhome/DiffusionEEG` with your actual DiffusionEEG base directory path, and update the synthetic dataset name (`DM_SPEC_MINUS_2`) to match the synthetic dataset you want to train on.
 
-#### 6.4.2 Run Cross-Domain Classification
+#### 7.4.2 Run Cross-Domain Classification
 
 Execute the cross-domain classification:
 
@@ -743,7 +772,7 @@ sbatch neuro-green/run_ldm_to_caueeg_classification.sh
 
 This script trains the GREEN model on synthetic data and tests it on genuine data, providing insights into how well synthetic data can substitute for genuine data in training classification models.
 
-### 6.5 Run Augmented Classification (200% Size Test)
+### 7.5 Run Augmented Classification (200% Size Test)
 
 For testing with augmented datasets at 200% size (100% genuine + 100% synthetic), use:
 
@@ -753,7 +782,7 @@ sbatch neuro-green/run_augmented_classification_100_new.sh
 
 **Note**: As with previous scripts, remember to update the relevant paths and naming configurations in the script before running.
 
-### 6.6 Run Discrimination Classification
+### 7.6 Run Discrimination Classification
 
 To test how well models can discriminate between genuine and synthetic data, use the discrimination classification script:
 
@@ -778,11 +807,11 @@ sbatch neuro-green/run_augmented_discrimination_classification.sh dementia
 
 **Note**: Follow the same configuration steps as previous scripts - update paths, randomization settings, output naming, and WandB configuration as needed.
 
-### 6.8 Bootstrap Training
+### 7.8 Bootstrap Training
 
 For statistical robustness, you can run bootstrap training with multiple random samples. There are several bootstrap scripts available:
 
-#### 6.8.1 Bootstrap with Shuffle Configuration Testing
+#### 7.8.1 Bootstrap with Shuffle Configuration Testing
 
 Test different shuffle combinations with bootstrap sampling:
 
@@ -790,7 +819,7 @@ Test different shuffle combinations with bootstrap sampling:
 sbatch neuro-green/run_bootstrap_shuffle.sh
 ```
 
-#### 6.8.2 Bootstrap with Augmented Data Percentages
+#### 7.8.2 Bootstrap with Augmented Data Percentages
 
 Run bootstrap training with different percentages of augmented data:
 
@@ -807,7 +836,7 @@ sbatch neuro-green/run_neuro_bootstrap.sh       # Default: 100%
 for pct in 20 40 60 80 100; do sbatch neuro-green/run_neuro_bootstrap.sh $pct; done
 ```
 
-#### 6.8.3 Bootstrap with Balanced Datasets
+#### 7.8.3 Bootstrap with Balanced Datasets
 
 Run bootstrap training on balanced datasets:
 
@@ -817,7 +846,7 @@ sbatch neuro-green/run_bootstrap_balanced.sh
 
 **Note**: Bootstrap training runs multiple iterations (default: 10) with random sampling to provide statistical confidence intervals for model performance. Each script follows the same configuration pattern as previous neuro-green scripts - remember to update paths, randomization settings, and WandB configuration as needed.
 
-### 6.9 Additional Classification Scripts
+### 7.9 Additional Classification Scripts
 
 The neuro-green folder contains various other classification scripts for different experimental setups. Each follows the same pattern:
 1. Update randomization settings (lines 12-14)
