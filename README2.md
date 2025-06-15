@@ -233,3 +233,281 @@ cp -r dataset/SYNTH-CAUEEG2/Label dataset/SYNTH-CAUEEG2-NORMALIZED/
 ```
 
 **Expected Output**: Upon completion, you will have a normalized synthetic dataset ready for use in `SYNTH-CAUEEG2-NORMALIZED`.
+
+## Step 3: Synthetic Sleep EEG Signal Generation using Latent Diffusion Models
+
+### 3.1 Create LDM Environment
+
+Create the required conda environment for the Latent Diffusion Models:
+
+```bash
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/create_env.sh
+```
+
+### 3.2 Configure Diffusion Model Settings
+
+The diffusion model configurations and naming are defined in:
+```
+Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_dm.yaml
+```
+
+Before training, update line 10 in the configuration file to set the run directory for your model:
+```yaml
+run_dir: 'dm_eeg_caueeg2_no_spec'  # Change this to your desired model name
+```
+
+### 3.3 Train Pure LDM (No Spectral)
+
+To train the diffusion model without spectral features (dm_no_spec), first ensure the config directory paths are updated for your system, then run:
+
+```bash
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_pure_ldm.sh [CONDITION]
+```
+
+Where `[CONDITION]` is one of:
+- `hc` - healthy controls only
+- `mci` - MCI patients only  
+- `dementia` - dementia patients only
+
+**Example usage:**
+```bash
+# Train on healthy controls
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_pure_ldm.sh hc
+
+# Train on MCI patients
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_pure_ldm.sh mci
+
+# Train on dementia patients
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_pure_ldm.sh dementia
+```
+
+**Note**: The script includes automatic requeue functionality for long training jobs and validates the condition parameter before starting training.
+
+### 3.4 Train Pure LDM with Spectral Loss
+
+To train the diffusion model with spectral features, you have two spectral weight options:
+
+#### 3.4.1 Spectral Weight 1E-6
+
+1. Update the run directory in the config file (line 10):
+```yaml
+run_dir: 'dm_eeg_caueeg2_spec_1e6'  # Change to reflect spectral training
+```
+
+2. Uncomment line 59 in `run_train_pure_ldm.sh`:
+```bash
+#   --spe spectral 
+```
+Change to:
+```bash
+    --spe spectral 
+```
+
+3. Run the training:
+```bash
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_pure_ldm.sh [CONDITION]
+```
+
+#### 3.4.2 Spectral Weight 1E-2
+
+1. Update the run directory in the config file (line 10):
+```yaml
+run_dir: 'dm_eeg_caueeg2_spec_1e2'  # Change to reflect spectral weight
+```
+
+2. Modify the spectral weight in `Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/src/train_pure_ldm.py` on line 218:
+```python
+# Change from:
+spectral_weight=1E-6
+# To:
+spectral_weight=1E-2
+```
+
+3. Uncomment line 59 in `run_train_pure_ldm.sh` (same as above):
+```bash
+    --spe spectral 
+```
+
+4. Run the training:
+```bash
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_pure_ldm.sh [CONDITION]
+```
+
+### 3.5 Generate Synthetic Data from Trained Models
+
+After training the diffusion models, you can generate synthetic EEG data for each health condition.
+
+First, update the paths in `Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_generate_dm_eeg.sh` on lines 54-60:
+
+```bash
+# Update these paths to match your system and trained models:
+--hc_model_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/dm_eeg_caueeg2_no_spec_label_0/final_model.pth \
+--mci_model_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/dm_eeg_caueeg2_no_spec_label_1/final_model.pth \
+--dementia_model_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/dm_eeg_caueeg2_no_spec_label_2/final_model.pth \
+--diffusion_config /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_dm.yaml \
+--original_label_path /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2/Label/label.npy \
+--original_data_path /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2/Feature \
+--output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/DM_NO_SPEC \
+```
+
+**Important**: 
+- Replace `/home/stud/timlin/bhome/DiffusionEEG` with your actual DiffusionEEG base directory path
+- Update the model path directories (e.g., `dm_eeg_caueeg2_no_spec`) to match the `run_dir` you configured in your training (e.g., `dm_eeg_caueeg2_spec_1e6` if you trained with spectral loss)
+
+Then run the generation script for each condition:
+```bash
+# Generate healthy control data
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_generate_dm_eeg.sh hc
+
+# Generate MCI data
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_generate_dm_eeg.sh mci
+
+# Generate dementia data
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_generate_dm_eeg.sh dementia
+```
+
+## Step 4: Latent Diffusion Model (LDM) Data Generation
+
+### 4.1 Set Up AutoEncoderKL (AEKL) Models
+
+Before generating LDM data, you need to train the AutoEncoderKL models first.
+
+#### 4.1.1 Configure AEKL Settings
+
+Update the run directory in the AEKL config file to reflect your model configuration. For example, for a model without spectral features:
+
+```yaml
+run_dir: 'aekl_eeg_4channels_no_spec'  # Change to indicate your model configuration
+```
+
+#### 4.1.2 Update AEKL Training Paths
+
+Update the paths in `Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_aekl.sh` on lines 54 and 55:
+
+```bash
+# Line 54:
+--path_pre_processed /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
+# Line 55:
+--config_file /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_encoder_eeg.yaml \
+```
+
+Replace `/home/stud/timlin/bhome/DiffusionEEG` with your actual DiffusionEEG base directory path.
+
+#### 4.1.3 Train AEKL Models
+
+Run the AEKL training for each health condition:
+
+```bash
+# Train AEKL for healthy controls
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_aekl.sh hc
+
+# Train AEKL for MCI patients
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_aekl.sh mci
+
+# Train AEKL for dementia patients
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_aekl.sh dementia
+```
+
+**Note**: To train AEKL with spectral loss, uncomment lines 58 and 59 in `Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_aekl.sh`:
+
+```bash
+# Change from:
+    # --spe spectral \
+    # --spectral_cap 10
+
+# To:
+    --spe spectral \
+    --spectral_cap 10
+```
+
+Don't forget to also update the run directory in the config file to reflect the spectral training:
+```yaml
+run_dir: 'aekl_eeg_4channels_spec'  # Change to indicate spectral features
+```
+
+### 4.2 Train Latent Diffusion Model (LDM)
+
+After training the AEKL models, you can now train the actual Latent Diffusion Models.
+
+#### 4.2.1 Configure LDM Settings
+
+Update the run directory in `Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_ldm.yaml` on line 11:
+
+```yaml
+run_dir: 'ldm_caueeg2_4ch_116size_no_spec'  # Update to reflect your model configuration
+```
+
+#### 4.2.2 Update LDM Training Paths
+
+Update the paths in `Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_ldm.sh` on lines 57, 58, and 59:
+
+```bash
+# Line 57:
+--path_pre_processed /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
+# Line 58:
+--best_model_path "/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/aekl_eeg_4channels_no_spec_label_${CONDITION}" \
+# Line 59:
+--autoencoderkl_config_file_path "/home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_encoder_eeg.yaml" \
+```
+
+**Important**: 
+- Replace `/home/stud/timlin/bhome/DiffusionEEG` with your actual DiffusionEEG base directory path
+- Update the AEKL model path (`aekl_eeg_4channels_no_spec`) to match the run_dir you used when training the AEKL models
+
+#### 4.2.3 Train LDM Models
+
+Run the LDM training for each health condition:
+
+```bash
+# Train LDM for healthy controls
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_ldm.sh hc
+
+# Train LDM for MCI patients
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_ldm.sh mci
+
+# Train LDM for dementia patients
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_train_ldm.sh dementia
+```
+
+### 4.3 Generate LDM Synthetic Data
+
+After training both AEKL and LDM models, you can generate synthetic EEG data using the latent diffusion approach.
+
+#### 4.3.1 Update LDM Generation Paths
+
+Update the paths in `Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_generate_eeg.sh` on lines 54-64:
+
+```bash
+# Update these paths to match your system and trained models:
+--hc_model_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/ldm_caueeg2_4ch_116size_label_hc/final_model.pth \
+--mci_model_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/ldm_caueeg2_4ch_116size_label_mci/final_model.pth \
+--dementia_model_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/ldm_caueeg2_4ch_116size_label_dementia/final_model.pth \
+--hc_autoencoder_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/aekl_eeg_4channels_label_hc/best_model.pth \
+--mci_autoencoder_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/aekl_eeg_4channels_label_mci/best_model.pth \
+--dementia_autoencoder_path /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/outputs/aekl_eeg_4channels_label_dementia/best_model.pth \
+--autoencoder_config /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_encoder_eeg.yaml \
+--diffusion_config /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_ldm.yaml \
+--original_label_path /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2/Label/label.npy \
+--original_data_path /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2/Feature \
+--output_dir /home/stud/timlin/bhome/DiffusionEEG/dataset/LDM_PSD_Normalized_FIX \
+```
+
+**Important**: 
+- Replace `/home/stud/timlin/bhome/DiffusionEEG` with your actual DiffusionEEG base directory path
+- Update the model directory names to match the `run_dir` you configured in your LDM training (e.g., `ldm_caueeg2_4ch_116size` should match your LDM config)
+- Update the autoencoder directory names to match the `run_dir` you used for AEKL training (e.g., `aekl_eeg_4channels` should match your AEKL config)
+
+#### 4.3.2 Generate LDM Data
+
+Run the LDM generation for each health condition:
+
+```bash
+# Generate healthy control data
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_generate_eeg.sh hc
+
+# Generate MCI data
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_generate_eeg.sh mci
+
+# Generate dementia data
+sbatch Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/run_generate_eeg.sh dementia
+```

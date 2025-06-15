@@ -55,6 +55,9 @@ python -u src/train_autoencoderkl.py \
     --config_file /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_encoder_eeg.yaml \
     --label_filter $CONDITION \
     --clip_grad 0.5 \
+    # --spe spectral \
+    # --spectral_cap 10
+# Uncomment the above line to enable spectral training
 
 # Record completion
 echo "Job completed/interrupted at $(date)"

@@ -2,8 +2,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
 #SBATCH --time=48:00:00
-#SBATCH --job-name=dm_spec_min_2
-#SBATCH --output=outputs/dm_caueeg2_spec_min_2_%j.out
+#SBATCH --job-name=dm_no_spec
+#SBATCH --output=outputs/dm_caueeg2_no_spec_%j.out
 #SBATCH --signal=B:USR1@300
 #SBATCH --requeue
 
@@ -24,7 +24,7 @@ echo "Job started at $(date)"
 # Activate environment
 uenv verbose cuda-11.8.0 cudnn-11.x-8.7.0
 uenv miniconda3-py39
-conda activate ldm-eeg
+conda activate ldm-test
 
 cd Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models
 
@@ -56,7 +56,7 @@ python src/train_pure_ldm.py \
     --path_pre_processed /home/stud/timlin/bhome/DiffusionEEG/dataset/CAUEEG2 \
     --label_filter $CONDITION \
     --config_file /home/stud/timlin/bhome/DiffusionEEG/Synthetic-Sleep-EEG-Signal-Generation-using-Latent-Diffusion-Models/project/config/config_dm.yaml \
-
-
+#   --spe spectral 
+# Uncomment the above line to enable spectral training
 # Record completion
 echo "Job completed/interrupted at $(date)"
