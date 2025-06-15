@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --gres=gpu:0
-#SBATCH --partition=gpu
-#SBATCH --time=03:15:00
+#SBATCH --partition=cpu64
+#SBATCH --time=24:00:00
 #SBATCH --job-name=env_setup_compile
 #SBATCH --output=outputs/env_setup.out
+
+# Create outputs directory if it doesn't exist
+mkdir -p outputs
  
 # Activate environment
-uenv verbose cuda-11.8.0 cudnn-11.x-8.7.0
-env miniconda3-py311
+uenv miniconda3-py311
 conda env create -f preprocess/environment.yml
-
